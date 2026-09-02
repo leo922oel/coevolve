@@ -1,0 +1,46 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  suite:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Every script carries `from __future__ import annotations`, so the
+        # 3.10-shaped annotations (`dict[str, list[str]]`, `str | None`) are
+        # never evaluated and do not require 3.10. The matrix exists to keep
+        # that true rather than to assert it. 3.10, 3.11 and 3.12 are verified
+        # on the author's machine; 3.9 and 3.13 are the ends only CI can reach.
+        python: ['3.9', '3.10', '3.11', '3.12', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      # The suite shells out to python3, jq, git and bash rather than importing
+      # anything, so what matters is what is on PATH, not what pip resolved.
+      - name: what this is running against
+        run: |
+          bash --version | head -1
+          python3 -V
+          jq --version
+          git --version
+
+      # test-no-personal-data.sh reads `git ls-files`, so it needs the checkout
+      # to be a real repository — which actions/checkout gives it.
+      - name: run the suite
+        run: bash plugins/coevolve/tests/run-all.sh
