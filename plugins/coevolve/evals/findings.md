@@ -201,3 +201,17 @@ knowingly. It requires a reason and a `review_on:` date and comes back then, so
 it cannot become where lessons go to be forgotten — and acceptance *without* a
 date is treated as unhandled, so it cannot be used to silence anything.
 Acceptance criterion C8; three hook tests cover it.
+
+**The three runs disagreed three ways, which is the finding.** run-1 wrote
+`enacted`, run-2 left it `logged`, and run-3 invented `state: accepted` —
+together with a `review_on:` field and the rationale "nothing fits, risk carried
+knowingly ... the review date is when it gets looked at again". None of that
+existed anywhere: not in the skill, not in the template, not in the vocabulary.
+
+A three-way split on the same question is what an under-specified instruction
+looks like from the outside. One run reaching for a state that does not exist,
+and independently choosing the same name and the same review-date mechanism that
+the fix later used, is about as clear as this kind of evidence gets. The design
+was not invented to patch a failure; it was the answer the material already
+implied, and the eval surfaced it by making three attempts visible side by
+side.
