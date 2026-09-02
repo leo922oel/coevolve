@@ -160,6 +160,14 @@ It refuses to install a guard that fails its own tests, backs up settings,
 preserves existing hooks, registers, and only then stamps — so a failed
 registration leaves the lesson unstamped rather than silently lying.
 
+It also refuses to guess **which** settings file. When `COEVOLVE_HOME` points
+somewhere other than `~/.claude/coevolve` — a sandbox, a fixture, a second home
+— the lesson and the settings belong to different installations, and writing a
+hook into the real settings on behalf of a lesson that lives elsewhere is never
+what was meant. Pass `--settings <path>` to say which one you mean — or set
+`CLAUDE_CONFIG_DIR`, which Claude Code itself uses to locate `settings.json`,
+and the installer will follow it.
+
 **When activation needs the user (registering a hook edits their settings), the
 lesson stays `logged` and you hand them the installer command.** A lesson marked
 `enacted` for a hook nobody has registered looks handled and is not — and the

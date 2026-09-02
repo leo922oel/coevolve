@@ -18,7 +18,7 @@
 set -uo pipefail
 
 lesson="" guard="" event="" matcher="" testcmd="" dry=0
-settings="${CLAUDE_SETTINGS:-$HOME/.claude/settings.json}"
+settings="" settings_explicit=0
 while (( $# )); do
   case "$1" in
     --lesson)   lesson="$2"; shift 2 ;;
@@ -26,7 +26,7 @@ while (( $# )); do
     --event)    event="$2"; shift 2 ;;
     --matcher)  matcher="$2"; shift 2 ;;
     --test)     testcmd="$2"; shift 2 ;;
-    --settings) settings="$2"; shift 2 ;;
+    --settings) settings="$2"; settings_explicit=1; shift 2 ;;
     --dry-run)  dry=1; shift ;;
     *) echo "enforcement-install: unknown argument: $1" >&2; exit 2 ;;
   esac
@@ -37,6 +37,51 @@ done
 [[ -f "$lesson" ]] || { echo "enforcement-install: no such lesson: $lesson" >&2; exit 2; }
 [[ -f "$guard"  ]] || { echo "enforcement-install: no such guard: $guard" >&2; exit 2; }
 command -v jq >/dev/null || { echo "enforcement-install: jq is required" >&2; exit 2; }
+
+# Which settings file, in descending order of how sure we are:
+#   --settings          the caller said so
+#   CLAUDE_SETTINGS     the caller said so, out of band
+#   CLAUDE_CONFIG_DIR   Claude Code's own relocation switch (`?? ~/.claude`),
+#                       so honouring it means a sandbox does not need to know
+#                       this installer exists
+#   $HOME/.claude       a guess, and the only one — checked below
+if [[ -z "$settings" ]]; then
+  if [[ -n "${CLAUDE_SETTINGS:-}" ]]; then
+    settings="$CLAUDE_SETTINGS"; settings_explicit=1
+  elif [[ -n "${CLAUDE_CONFIG_DIR:-}" ]]; then
+    settings="$CLAUDE_CONFIG_DIR/settings.json"; settings_explicit=1
+  else
+    settings="$HOME/.claude/settings.json"
+  fi
+fi
+config_home="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+
+abspath() { python3 -c 'import os,sys; print(os.path.realpath(os.path.expanduser(sys.argv[1])))' "$1"; }
+
+# ── 0. The settings file and the coevolve home must belong to the same install.
+#
+#       A run against a sandbox, a fixture, or a second home would otherwise
+#       register its hook in the real ~/.claude/settings.json, because the
+#       target defaulted to $HOME while the home was somewhere else entirely.
+#       That has happened: an eval subject working inside a fixture directory
+#       installed a UserPromptSubmit hook pointing at a path under /tmp, which
+#       would have blocked every prompt once the temp directory was reaped.
+#       There is no safe way to guess which of the two the caller meant, so
+#       don't — name it, and the ambiguity is gone.
+if (( ! settings_explicit )) && [[ -n "${COEVOLVE_HOME:-}" ]]; then
+  if [[ "$(abspath "$COEVOLVE_HOME")" != "$(abspath "$config_home/coevolve")" ]]; then
+    {
+      echo "enforcement-install: refusing to guess which settings file to write."
+      echo "  COEVOLVE_HOME is : $(abspath "$COEVOLVE_HOME")"
+      echo "  but would write  : $(abspath "$settings")"
+      echo
+      echo "  Those belong to different installations. Registering a hook in one"
+      echo "  while the lesson lives in the other is never what you meant."
+      echo "  Say which: --settings <path>, or set CLAUDE_SETTINGS."
+    } >&2
+    exit 2
+  fi
+fi
 
 today="$(date +%Y-%m-%d)"
 command="bash \"$guard\""
@@ -64,13 +109,22 @@ fi
 
 # ── 2. Register. Existing hooks are preserved; a hook already pointing at this
 #       guard is left alone so re-running is safe.
+# A relocated config dir may not exist yet; failing on that would be a confusing
+# way to say "your CLAUDE_CONFIG_DIR is new".
+mkdir -p "$(dirname "$settings")" 2>/dev/null
 [[ -f "$settings" ]] || echo '{}' > "$settings"
 if jq -e --arg c "$command" --arg e "$event" \
      '[(.hooks[$e] // [])[] | .hooks[]? | .command] | index($c) != null' \
      "$settings" >/dev/null 2>&1; then
   echo "already registered: $event -> $command"
 else
-  backup="$settings.bak.$today"
+  # Date-only names collided: a second install on the same day copied the
+  # already-modified settings over the first install's backup, destroying the
+  # only pristine copy. Never reuse a name that exists.
+  stamp="$(date +%Y%m%d-%H%M%S)"
+  backup="$settings.bak.$stamp"
+  n=0
+  while [[ -e "$backup" ]]; do n=$((n+1)); backup="$settings.bak.$stamp-$n"; done
   cp "$settings" "$backup" || { echo "enforcement-install: could not back up $settings" >&2; exit 1; }
   entry="$(jq -n --arg c "$command" --arg m "$matcher" --arg d "installed by coevolve enact" \
     '{hooks: [{type: "command", command: $c, timeout: 10}], description: $d}

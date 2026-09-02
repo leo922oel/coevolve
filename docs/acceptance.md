@@ -59,9 +59,20 @@ reaches an enforcement layer does not change behaviour, so state is tracked.
 | C4 | State transitions are append-only and dated; a lesson's history is reconstructable. |
 | C5 | On enactment, a lesson records a **baseline snapshot** of its registered metric, taken while the data still exists. The snapshot reports `usable`, which is false both when there are too few sessions and when there are enough that are all the same observation — two different ways to be worthless, and `too_thin` alone reported the second as fine. |
 | C6 | A lesson's `enacted:` date is the day enforcement actually became **live**. Where activation needs a user action, the lesson stays `logged` and the stamp is performed by the installer that does the activation, so the two cannot diverge. |
-| C9 | The nudge stays credible in both directions: lower-severity lessons surface on a longer fuse rather than being filtered out, verification is not asked for until it is plausibly answerable, and a malformed state (`enacted` with no date) is loud rather than skipped. |
-| C8 | A lesson that genuinely cannot be enforced goes to **`accepted`**, never `enacted`. Acceptance requires a `review_on:` date, an `observable_check:`, and the reason each enforcement layer was rejected **with the premise it rested on** — a later review tests those premises and cannot re-derive them. Acceptance without a date is treated as unhandled, so it cannot be used to silence a lesson. |
 | C7 | ENACT writes only under `lessons/` and `enforcement/`. The playbook belongs to DISTILL and the calibration log to CALIBRATE; a stage that edits its neighbours' artifacts makes every later diff ambiguous. |
+| C8 | A lesson that genuinely cannot be enforced goes to **`accepted`**, never `enacted`. Acceptance requires a `review_on:` date, an `observable_check:`, and the reason each enforcement layer was rejected **with the premise it rested on** — a later review tests those premises and cannot re-derive them. Acceptance without a date is treated as unhandled, so it cannot be used to silence a lesson. |
+| C9 | The nudge stays credible in both directions: lower-severity lessons surface on a longer fuse rather than being filtered out, verification is not asked for until it is plausibly answerable, and a malformed state (`enacted` with no date) is loud rather than skipped. |
+| C10 | The settings file a hook is registered in and the coevolve home the lesson lives in must belong to the **same installation**. The target is resolved `--settings` → `CLAUDE_SETTINGS` → `$CLAUDE_CONFIG_DIR/settings.json` → `$HOME/.claude/settings.json`, and only the last is a guess: when `COEVOLVE_HOME` is not the default for that config dir and nothing named a target, the installer refuses and writes nothing. A run against a sandbox or fixture home must not be able to reach the real settings. |
+
+> **Why C10 exists** — found by an eval subject, in the worst possible way. A
+> run working inside a fixture directory registered a `UserPromptSubmit` hook in
+> the operator's real `~/.claude/settings.json`, pointing at a guard under
+> `/tmp`. Cleanup removed it three minutes later, so nothing broke — but a
+> missing hook script exits 2, and exit 2 on `UserPromptSubmit` denies the
+> prompt, so a reaped temp directory would have blocked every prompt on that
+> machine. Two of three runs given the same prompt refused to touch settings and
+> said so; one did it. A boundary that holds two times in three is not a
+> boundary, which is why this is a criterion and not a line in a rubric.
 
 > **Why C6 exists** — found by the grader, not by design. Two of three enact
 > runs stamped `state: enacted` with today's date for a hook that was not
