@@ -26,18 +26,32 @@ SCRIPTS = HERE.parent / "scripts"
 PROJECTS = Path.home() / ".claude" / "projects"
 
 
+# The agent's own prompt is the first user record. Searching the whole file
+# instead matches any transcript that merely *mentions* the path — an agent that
+# ran a broad `find` captures other runs' directories in its tool output, and
+# then one transcript claims every run. Seen exactly that: three runs all
+# attributed to a fourth agent, reporting identical tool counts.
+PROMPT_SCAN_LINES = 6
+
+
 def find_transcript(run_dir: Path) -> Path | None:
-    """The agent's transcript is the one whose prompt names this run directory."""
     needle = str(run_dir).encode()
-    best = None
+    matches = []
     for path in PROJECTS.rglob("agent-*.jsonl"):
         try:
-            if needle in path.read_bytes():
-                if best is None or path.stat().st_mtime > best.stat().st_mtime:
-                    best = path
+            with path.open("rb") as fh:
+                head = b"".join(next(fh, b"") for _ in range(PROMPT_SCAN_LINES))
         except OSError:
             continue
-    return best
+        if needle in head:
+            matches.append(path)
+    if not matches:
+        return None
+    if len(matches) > 1:
+        print(f"grade_deterministic: {len(matches)} transcripts claim {run_dir.name}; "
+              f"using the newest", file=sys.stderr)
+        matches.sort(key=lambda p: p.stat().st_mtime)
+    return matches[-1]
 
 
 def fingerprint(transcript: Path) -> dict:
@@ -92,7 +106,7 @@ def lesson_states(run_dir: Path) -> dict[str, dict]:
     return out
 
 
-def grade(run_dir: Path) -> dict:
+def grade(run_dir: Path, root: Path) -> dict:
     diff = disk_diff(run_dir)
     transcript = find_transcript(run_dir)
     fp = fingerprint(transcript) if transcript else {}
@@ -102,7 +116,7 @@ def grade(run_dir: Path) -> dict:
                        {"enact", "verify", "profile", "curate", "calibrate",
                         "distill", "status", "predict", "dev-playbook", "setup"}}
     return {
-        "run": str(run_dir.relative_to(HERE / "workspace")),
+        "run": str(run_dir.relative_to(root)),
         "answered": (run_dir / "outputs" / "answer.md").exists(),
         "answer_chars": len((run_dir / "outputs" / "answer.md").read_text(encoding="utf-8"))
                          if (run_dir / "outputs" / "answer.md").exists() else 0,
@@ -121,9 +135,16 @@ def grade(run_dir: Path) -> dict:
 
 
 def main() -> int:
-    root = HERE / "workspace" / "iteration-1"
+    # The workspace is a parameter because it must be able to live outside the
+    # repo. When it sits inside, a run can reach the plugin source by walking up
+    # and read SKILL.md through the shell instead of invoking the skill — which
+    # silently turns a triggering measurement into something else.
+    root = Path(sys.argv[1]) if len(sys.argv) > 1 else HERE / "workspace" / "iteration-1"
+    if not root.exists():
+        print(f"grade_deterministic: no such workspace: {root}", file=sys.stderr)
+        return 2
     runs = sorted(p.parent for p in root.rglob("outputs") if p.is_dir())
-    results = [grade(r) for r in runs]
+    results = [grade(r, root) for r in runs]
     (root / "deterministic-grades.json").write_text(
         json.dumps(results, indent=2, ensure_ascii=False), encoding="utf-8")
     for r in results:
