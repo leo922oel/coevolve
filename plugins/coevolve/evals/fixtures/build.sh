@@ -8,6 +8,7 @@
 #
 # Usage: build.sh <fixture-name> <target-dir>
 set -euo pipefail
+FIXTURE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 name="${1:?usage: build.sh <fixture> <target-dir>}"
 dst="${2:?usage: build.sh <fixture> <target-dir>}"
 mkdir -p "$dst"/{metrics,episodes,lessons,patterns,predictions,inbox-archive}
@@ -55,17 +56,54 @@ updated: 2026-09-01
 PB
 }
 
-# One fingerprint line. Deliberately minimal but schema-shaped.
+# A fingerprint, produced the way production produces one: synthesise a
+# transcript, then run the real extractor over it.
 #
-# `derived` is computed rather than hard-coded. It is redundant with `counts` —
-# the roll-up recomputes it — but a fixture whose two halves disagree will
-# eventually be read directly by someone chasing a real bug, and send them the
-# wrong way.
-fp() { # session_id date tool_calls errors interrupts turns
-  local rate; rate="$(awk -v e="$4" -v t="$3" 'BEGIN{printf "%.6f", (t?e/t:0)}')"
-  local irate; irate="$(awk -v i="$5" -v t="$3" 'BEGIN{printf "%.6f", (t?i/t:0)}')"
-  printf '{"schema":"coevolve/session-metrics/1","session_id":"%s","transcript_id":"t-%s","transcript_kind":"session","project_key":"proj_11111111","label":null,"started_at":"%sT09:00:00.000Z","ended_at":"%sT10:00:00.000Z","span_days":0,"counts":{"lines":200,"parse_errors":0,"tool_calls":%s,"tool_results":%s,"tool_errors":%s,"interrupts":%s,"user_turns":%s,"assistant_messages":%s},"tools":{"Bash":%s},"skills":{},"subagents":{},"models":{"claude-opus-5":%s},"permission_modes":[],"modes":[],"tokens":{"input":10,"output":20,"cache_read":30,"cache_creation":5},"derived":{"error_rate":%s,"interrupt_rate":%s,"bash_share":1.0,"turns_per_100_tool_calls":0,"skill_calls":0,"subagent_calls":0,"delegated_tool_call_share":0}}\n' \
-    "$1" "$1" "$2" "$2" "$3" "$3" "$4" "$5" "$6" "$3" "$3" "$3" "$rate" "$irate"
+# This used to be hand-written JSON shaped to look plausible, and four separate
+# eval findings traced back to that single choice — identical values within a
+# window, constant token fields, and a main transcript claiming a delegated
+# share the extractor cannot emit. A reader cannot tell an unrealistic fixture
+# from a broken instrument, so impossible data costs real analysis time.
+#
+# Going through the extractor removes the class rather than the instances:
+# a fixture can now only hold a state production could also produce.
+#
+# fp <session_id> <date> <tool_calls> <errors> <interrupts> <turns> [skill] [project]
+fp() {
+  local sid="$1" date="$2" calls="$3" errs="$4" ints="$5" turns="$6"
+  local skill="${7:-}" project="${8:-proj}"
+  # Deterministic per-session variation, so no two sessions are byte-identical
+  # in shape unless a fixture deliberately makes them so.
+  local h; h=$(printf '%s' "$sid" | cksum | cut -d' ' -f1)
+  # Jitter the totals too, not only the composition. Callers pass one number
+  # per fixture, so without this every session in a window is identical in
+  # shape — which is the exact state the independence guard exists to catch,
+  # and which no real store produces. Errors scale with the total so the rate
+  # a fixture is built around survives.
+  # A fixture that *wants* uniform sessions says so; realism as an
+  # unoverridable default is just a different bug. Set COEVOLVE_FP_UNIFORM=1
+  # around the loop that needs it.
+  local jitter=$(( 85 + h % 31 ))          # 85%..115%, deterministic per session
+  [ "${COEVOLVE_FP_UNIFORM:-0}" = "1" ] && jitter=100
+  local calls0="$calls"
+  calls=$(( calls * jitter / 100 )); [ "$calls" -lt 1 ] && calls=1
+  if [ "$errs" -gt 0 ]; then
+    errs=$(( errs * calls / calls0 )); [ "$errs" -lt 1 ] && errs=1
+  fi
+  local bash_n read_n edit_n hours
+  bash_n=$(( calls * (60 + h % 20) / 100 ))
+  read_n=$(( (calls - bash_n) * 3 / 4 ))
+  edit_n=$(( calls - bash_n - read_n ))
+  hours=$(( 1 + (h / 7) % 6 ))
+  local tdir; tdir="$(mktemp -d)"
+  python3 "$FIXTURE_DIR/make_transcript.py" --out "$tdir/t.jsonl" \
+    --date "$date" --project "$project" --seed "$h" \
+    --bash "$bash_n" --read "$read_n" --edit "$edit_n" \
+    --errors "$errs" --turns "$turns" --interrupts "$ints" --hours "$hours" \
+    ${skill:+--skill "$skill"}
+  python3 "$FIXTURE_DIR/../../scripts/session_metrics.py" "$tdir/t.jsonl" \
+    | python3 -c 'import json,sys; d=json.load(sys.stdin); d["session_id"]=sys.argv[1]; d["transcript_id"]="t-"+sys.argv[1]; print(json.dumps(d,ensure_ascii=False))' "$sid"
+  rm -rf "$tdir"
 }
 
 case "$name" in
@@ -457,8 +495,12 @@ Nothing found. Accepted 2026-06-01 with a 90-day review.
 - 2026-06-01 logged
 - 2026-06-01 accepted — no enforcement layer applies; review 2026-08-20
 LES
-    # Since acceptance, review-heavy sessions have accumulated — and the
-    # fingerprint now records skill usage, which did not exist in June.
+    # Deliberately left varied. An earlier version made all 24 sessions
+    # identical, and runs used that degeneracy as the evidence that no metric
+    # could carry the lesson. The real argument is stronger and does not need
+    # the crutch: no field in the fingerprint schema encodes review depth at
+    # all. Varied data forces the run to make that argument instead of reading
+    # it off a degenerate sample.
     for i in $(seq 1 24); do
       fp "s$i" "2026-08-$(printf '%02d' $((i % 28 + 1)))" 80 2 0 6 >> "$dst/metrics/2026-08.jsonl"
     done
