@@ -106,3 +106,25 @@ more statistics cannot help and only more data can; and it explicitly refused
 the pseudo-replication that would treat 400 tool calls as independent samples
 and produce p ≈ 1e-4. Neither is in the skill text. The skill asked for honest
 refusal and left the reasoning to the model, which is the right division.
+
+## F6 — triggering is fine; the harness was the problem (resolved)
+
+Re-measured properly: `claude -p` in a fresh session with an empty working
+directory, so the plugin cannot be found by exploration and the prompt does not
+name it.
+
+| case | skill fired | first tool call |
+|---|---|---|
+| export my cowork profile | `coevolve:profile` | Skill |
+| a high-severity lesson is stuck | `coevolve:status` → `coevolve:enact` | Skill |
+| did that rule actually help | `coevolve:verify` | Skill |
+| why does this python raise IndexError | none | none |
+
+Three of three positives fired as the **first** action, before any exploration
+could have revealed the plugin, and the negative correctly did not. The enact
+case chained status → enact, which is the right order: navigate, then act.
+
+So the descriptions work. Both iterations' triggering numbers measured the
+harness, not the product. `trigger_check.sh` fixes the method: it is the same
+measurement, repeatable, and it runs today rather than waiting on the gated
+`plugin eval`.
