@@ -4,6 +4,10 @@ severity: high | medium | low
 state: logged
 enforcement: none
 logged: YYYY-MM-DD
+# The day enforcement actually STARTED FIRING — not the day it was written.
+# VERIFY splits its comparison here, so a date set early creates a window in
+# which nothing was enforced and nothing downstream can tell. Let
+# templates/enforcement-install.sh set it: it activates and stamps together.
 enacted:
 verified:
 retired:

@@ -105,20 +105,38 @@ Show the actual content, not a description of it:
 Then say what it does **not** cover. Every enforcement has a gap, and an unstated
 gap gets mistaken for coverage.
 
-## 5. Apply on approval, and record the transition
+## 5. Apply on approval — and never stamp ahead of reality
 
-After the user approves and the artifact is in place, update the lesson:
+`enacted:` is the split date VERIFY compares across. It has to be the day the
+enforcement actually started firing. Stamping it when the artifact was *written*
+puts a window on one side of every future comparison in which nothing was being
+enforced, and nothing downstream can detect that.
 
-```yaml
-state: enacted
-enforcement: hook          # or rule / skill / none
-enacted: YYYY-MM-DD
-metric: derived.interrupt_rate
-metric_direction: down
+So do not write the stamp by hand. Use the shipped installer, which does the
+activation and the stamp as one operation:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/templates/enforcement-install.sh" \
+  --lesson  "$HOME_DIR/lessons/L-....md" \
+  --guard   "$HOME_DIR/enforcement/<guard>" \
+  --event   UserPromptSubmit --matcher Bash \
+  --test    "python3 $HOME_DIR/enforcement/<guard> selftest" \
+  --dry-run
 ```
 
-Append to its History section. `enacted` is the split date `verify` will use, so
-it must be the day the change actually took effect, not the day you wrote it up.
+It refuses to install a guard that fails its own tests, backs up settings,
+preserves existing hooks, registers, and only then stamps — so a failed
+registration leaves the lesson unstamped rather than silently lying.
+
+**When activation needs the user (registering a hook edits their settings), the
+lesson stays `logged` and you hand them the installer command.** A lesson marked
+`enacted` for a hook nobody has registered looks handled and is not — and the
+session-start nudge, which is the thing that would otherwise keep reminding
+them, goes quiet. Leaving it noisy until it is genuinely live is the point.
+
+For a `rule` or a `skill`, activation is the edit itself, so stamp when the edit
+lands. Fill `metric`, `metric_direction` and `baseline` at proposal time either
+way: those are decisions, not activations.
 
 ## 6. Say the quiet part
 
@@ -128,7 +146,12 @@ just produced a more elaborate way of writing things down.
 
 ## Boundaries
 
+- Writes only under `lessons/` and `enforcement/`. The playbook belongs to
+  `coevolve:distill` and the calibration log to `coevolve:calibrate` — a stage
+  that edits its neighbours' artifacts makes every later diff ambiguous about
+  which stage claimed what.
 - Never applies an enforcement artifact without explicit approval, and never
   edits settings, hooks, or always-loaded rules silently.
+- Never stamps `enacted:` for enforcement that is not yet live.
 - Never marks a lesson `verified` — that is `coevolve:verify`, and only with data.
 - Never proposes an enforcement whose only mechanism is "remember to".

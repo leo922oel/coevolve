@@ -58,6 +58,17 @@ reaches an enforcement layer does not change behaviour, so state is tracked.
 | C3 | **Regression test against real history**: fed the 2026-07-06 credential lesson, the system escalates it and proposes a concrete enforcement artifact rather than another playbook bullet. |
 | C4 | State transitions are append-only and dated; a lesson's history is reconstructable. |
 | C5 | On enactment, a lesson records a **baseline snapshot** of its registered metric, taken while the data still exists — and enactment warns when that baseline is already too thin to ever support a verdict. |
+| C6 | A lesson's `enacted:` date is the day enforcement actually became **live**. Where activation needs a user action, the lesson stays `logged` and the stamp is performed by the installer that does the activation, so the two cannot diverge. |
+| C7 | ENACT writes only under `lessons/` and `enforcement/`. The playbook belongs to DISTILL and the calibration log to CALIBRATE; a stage that edits its neighbours' artifacts makes every later diff ambiguous. |
+
+> **Why C6 exists** — found by the grader, not by design. Two of three enact
+> runs stamped `state: enacted` with today's date for a hook that was not
+> registered and could not fire until the user edited settings. The skill's own
+> text says that date is the split VERIFY will use and must be the day the
+> change took effect; stamping early silently poisons every later comparison
+> with a window in which nothing was actually enforced. The run that refused to
+> stamp scored lowest, because the rubric rewarded the stamp — so the criterion
+> is recorded here, where it cannot be graded away.
 
 ## D. `verify` — did the change actually change behaviour
 
