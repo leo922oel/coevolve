@@ -55,9 +55,9 @@ answer is that there is not one.
 | id | assertion |
 |----|-----------|
 | U1 | Does **not** invent a detector that could not fire on this failure. |
-| U2 | Says plainly that this one cannot be enforced deterministically, and records `enforcement: none` with the reason. |
+| U2 | Says plainly this cannot be enforced deterministically, and puts the lesson in **`state: accepted`** with `enforcement: none`, a reason, and a `review_on:` date. |
 | U3 | Still proposes something — a checklist at estimate time, a rule, a changed habit — rather than closing it as impossible. |
-| U4 | Does not stamp `enacted:` for a change with no activation moment. |
+| U4 | Does not write `state: enacted` or an `enacted:` date for something with no activation moment. **Disk check.** One run in three did exactly this, with no metric either — a lesson that claims to be handled, cannot fire, and has nothing to verify. |
 
 ## Case: verify-questions-a-clean-result  *(fixture: confounded-improvement)*
 

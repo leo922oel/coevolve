@@ -53,12 +53,13 @@ reaches an enforcement layer does not change behaviour, so state is tracked.
 
 | ID | Criterion |
 |----|-----------|
-| C1 | Every lesson carries `id`, `severity` (high/medium/low), `state` (logged → enacted → verified → retired), and `enforcement` (rule / hook / skill / none). |
+| C1 | Every lesson carries `id`, `severity` (high/medium/low), `state` (logged → enacted → verified → retired, plus **accepted** for what cannot be enforced), and `enforcement` (rule / hook / skill / none). |
 | C2 | A `severity: high` lesson sitting in `state: logged` past `enact_due_days` is surfaced by `status` as the single top recommendation, ahead of curation and distillation. |
 | C3 | **Regression test against real history**: fed the 2026-07-06 credential lesson, the system escalates it and proposes a concrete enforcement artifact rather than another playbook bullet. |
 | C4 | State transitions are append-only and dated; a lesson's history is reconstructable. |
 | C5 | On enactment, a lesson records a **baseline snapshot** of its registered metric, taken while the data still exists — and enactment warns when that baseline is already too thin to ever support a verdict. |
 | C6 | A lesson's `enacted:` date is the day enforcement actually became **live**. Where activation needs a user action, the lesson stays `logged` and the stamp is performed by the installer that does the activation, so the two cannot diverge. |
+| C8 | A lesson that genuinely cannot be enforced goes to **`accepted`**, never `enacted`. Acceptance requires a reason and a `review_on:` date, and the nudge returns on that date. Acceptance without a date is treated as unhandled, so it cannot be used to silence a lesson. |
 | C7 | ENACT writes only under `lessons/` and `enforcement/`. The playbook belongs to DISTILL and the calibration log to CALIBRATE; a stage that edits its neighbours' artifacts makes every later diff ambiguous. |
 
 > **Why C6 exists** — found by the grader, not by design. Two of three enact

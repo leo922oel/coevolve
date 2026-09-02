@@ -14,8 +14,10 @@ Read `$COEVOLVE_HOME/lessons/*.md` for `state: enacted`. Each carries the metric
 and direction chosen *before* the outcome was known, plus the `enacted:` date
 that splits the windows.
 
-If a lesson has `enforcement: none`, there is nothing to measure — check whether
-it recurred, and say so qualitatively rather than forcing a number onto it.
+A lesson in `state: accepted` has nothing to measure by definition — skip it
+here; it comes back through its own review date. If a lesson is `enacted` with
+`enforcement: none`, that combination is a mistake rather than a state: say so,
+and send it back to `coevolve:enact` to be either enforced or accepted.
 
 ## 2. Compare the two windows
 

@@ -1,6 +1,14 @@
 ---
 id: L-YYYY-MM-DD-short-slug
 severity: high | medium | low
+# logged    — known, nothing enforcing it yet
+# enacted   — enforcement is LIVE (see `enacted:` below)
+# verified  — the change was measured and it moved
+# accepted  — looked, nothing can enforce this, the risk is carried knowingly.
+#             Requires a reason and `review_on:`. Never use `enacted` for this:
+#             it claims something fired when nothing did, and sends VERIFY
+#             looking for a change that never happened.
+# retired   — no longer live
 state: logged
 enforcement: none
 logged: YYYY-MM-DD
@@ -11,6 +19,10 @@ logged: YYYY-MM-DD
 enacted:
 verified:
 retired:
+# accepted only: the date to look at this again. Acceptance is a decision to
+# carry a risk, not a way to stop the alarm — without a date the nudge treats
+# the lesson as unhandled.
+review_on:
 # The metric VERIFY will compare, named NOW — before the outcome is known.
 # Choosing it afterwards is metric shopping, and it always finds a win.
 metric:

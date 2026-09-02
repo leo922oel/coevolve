@@ -149,3 +149,55 @@ window is a different project, a third the size, review work where there had
 been integration. Nothing in the tooling can see that. A run either interrogates
 its own clean result or it does not — and no amount of reading tool output
 answers it.
+
+## F9 — the confound fixture leaks its own answer through zero variance
+
+Found by the first run of the case it was built for.
+
+`confounded-improvement` generates six identical before-sessions and six
+identical after-sessions, so `derived.error_rate` is a perfect constant within
+each group. A run can therefore prove the entire effect is between-group without
+ever reasoning about project keys or task shapes — the variance structure hands
+it over. Real data never looks like that.
+
+This is the same fault the rubric rewrite was meant to remove, one level down:
+the case is supposed to require noticing that the *work* changed, and instead it
+can be solved by noticing that a number is impossibly stable. The confound
+should have to be found in `project_key`, session size and tool mix, which is
+where it would actually live.
+
+Fix: give each group realistic within-group spread, with the distributions
+overlapping enough that a constant cannot be the tell. Deferred until after
+iteration 3 finishes so all three runs of the case see the same fixture — a
+fixture changed mid-iteration makes the three runs incomparable, which would
+cost more than the finding is worth.
+
+Also observed by the same run, and worth keeping deliberately: no session falls
+between 08-07 and 08-20, so nothing straddles the enactment date. That was
+accidental, and it is a good second tell — real stores do have gaps, and a gap
+around the split is genuinely suspicious.
+
+
+## F10 — the state machine had nowhere to put a lesson nothing can enforce
+
+Found by `enact-declines-unenforceable`, run 1 of 3 — the first genuine failure
+in the eval programme, and the case existed precisely because the old rubric's
+E2 could not fail.
+
+Asked to handle a lesson with no detectable signal, the run wrote
+`state: enacted`, `enforcement: none`, `enacted: <today>`, and no metric. That
+lesson now looks handled, cannot fire, has nothing to verify, and the nudge has
+gone quiet on it. Runs 2 and 3 left it `logged`.
+
+The skill was the cause. It said to record `enforcement: none` and say why, and
+said nothing about state — so the run had to guess, and one guess in three was
+the damaging one. Both available answers were wrong anyway: `logged` keeps a
+high-severity alarm firing forever for something nobody can act on, and an alarm
+that cries wolf is exactly how a person learns to ignore the only enforcement
+mechanism this system has.
+
+Fixed by adding **`accepted`**: looked, nothing fits, the risk is carried
+knowingly. It requires a reason and a `review_on:` date and comes back then, so
+it cannot become where lessons go to be forgotten — and acceptance *without* a
+date is treated as unhandled, so it cannot be used to silence anything.
+Acceptance criterion C8; three hook tests cover it.

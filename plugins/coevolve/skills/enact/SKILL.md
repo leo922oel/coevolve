@@ -42,9 +42,19 @@ Two honest tests before you pick:
   irreversible — leaked credentials, destroyed data, an external side effect.
 
 If nothing can enforce it — the signal genuinely is not detectable and the
-judgment genuinely cannot be pre-stated — say so plainly, set
-`enforcement: none`, and record why. An honest "this one has to stay a habit" is
-worth more than a hook that does not fire.
+judgment genuinely cannot be pre-stated — say so plainly. An honest "this one
+has to stay a habit" is worth more than a hook that does not fire.
+
+Then put it in **`state: accepted`**, with `enforcement: none`, a recorded
+reason, and a `review_on:` date. Not `enacted`: that claims something fires when
+nothing does, stops the nudge, and sends VERIFY looking for a change that never
+happened. Not `logged` either — leaving it there makes the alarm repeat forever
+for something nobody can act on, and an alarm that cries wolf is how people
+learn to ignore the one mechanism this system has.
+
+`accepted` says what actually happened: you looked, nothing fits, and you are
+carrying the risk on purpose. The review date is what stops it becoming the
+place lessons go to be forgotten — the nudge comes back then.
 
 ## 3. Name the metric NOW, before anything is applied
 

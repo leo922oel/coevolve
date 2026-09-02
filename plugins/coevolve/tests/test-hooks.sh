@@ -83,6 +83,54 @@ printf '%s' "$out" | grep -q '🚨' && fail "enacted lesson must stop nagging"
 printf '%s' "$out" | grep -q 'coevolve:verify' || fail "enacted lesson should now ask to be verified"
 echo "PASS due-check: lesson state machine drives what gets recommended"
 
+# ── a lesson nothing can enforce needs somewhere to go ────────────────────────
+# Leaving it `logged` makes the alarm cry wolf forever, which teaches the user to
+# ignore the one mechanism this system depends on. Marking it `enacted` is a lie
+# that also sends VERIFY looking for a change that never happened. `accepted`
+# says what actually happened — we looked, nothing fits, the risk is carried
+# knowingly — and it comes back on its review date so it cannot be a graveyard.
+export COEVOLVE_HOME="$(mktemp -d)"
+cp "$COEVOLVE_HOME/../$(basename "$COEVOLVE_HOME")/../"/dev/null /dev/null 2>/dev/null || true
+mkdir -p "$COEVOLVE_HOME/lessons"
+cat > "$COEVOLVE_HOME/config.md" <<'CFG'
+enact_due_days: 3
+weekly_due_days: 7
+monthly_due_days: 28
+inbox_nudge_count: 10
+calibrate_due_days: 14
+CFG
+old="$(date -d '30 days ago' +%Y-%m-%d)"
+future="$(date -d '60 days' +%Y-%m-%d)"
+past="$(date -d '2 days ago' +%Y-%m-%d)"
+mk() { cat > "$COEVOLVE_HOME/lessons/$1.md" <<LES
+---
+id: $1
+severity: high
+state: $2
+enforcement: none
+logged: $old
+review_on: $3
+---
+LES
+}
+mk L-accepted accepted "$future"
+out="$(bash "$CLAUDE_PLUGIN_ROOT/hooks/due-check.sh" 2>/dev/null)"
+printf '%s' "$out" | grep -q 'L-accepted' && fail "an accepted lesson must not keep raising the alarm"
+printf '%s' "$out" | grep -q 'coevolve:verify' && fail "an accepted lesson has nothing to verify"
+echo "PASS due-check: an accepted lesson stops nagging"
+
+mk L-accepted accepted "$past"
+out="$(bash "$CLAUDE_PLUGIN_ROOT/hooks/due-check.sh" 2>/dev/null)"
+printf '%s' "$out" | grep -q 'L-accepted' || fail "an accepted lesson past its review date must come back"
+echo "PASS due-check: acceptance expires on its review date"
+
+mk L-noreview accepted ""
+rm -f "$COEVOLVE_HOME/lessons/L-accepted.md"
+out="$(bash "$CLAUDE_PLUGIN_ROOT/hooks/due-check.sh" 2>/dev/null)"
+printf '%s' "$out" | grep -q 'L-noreview' || fail "accepted without a review date must not be a way to silence a lesson"
+echo "PASS due-check: acceptance without a review date does not silence anything"
+rm -rf "$COEVOLVE_HOME"
+
 # ── no config anywhere → both hooks stay completely silent ─────────────────────
 export COEVOLVE_HOME="$(mktemp -d)"
 [ -z "$(bash "$CLAUDE_PLUGIN_ROOT/hooks/due-check.sh" 2>/dev/null)" ] || fail "must be silent before setup"

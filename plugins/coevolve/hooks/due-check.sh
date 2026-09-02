@@ -30,16 +30,33 @@ out=""
 
 # ── ⑤ ENACT first: a high-severity lesson still only written down ──────────────
 if [[ -d "${HOME_DIR}/lessons" ]]; then
-  stuck=""
+  stuck=""; expired=""
   while IFS= read -r f; do
     grep -qE '^severity:[[:space:]]*high' "$f" || continue
-    grep -qE '^state:[[:space:]]*logged' "$f" || continue
-    logged="$(grep -m1 -E '^logged:' "$f" | sed -E 's/^logged:[[:space:]]*//')"
-    age="$(days_since "$logged")"
-    [[ -n "$age" && "$age" -ge "$enact_due" ]] || continue
-    stuck+="$(basename "${f%.md}") (${age}d) "
+    state="$(grep -m1 -E '^state:' "$f" | sed -E 's/^state:[ \t]*//')"
+    name="$(basename "${f%.md}")"
+    case "$state" in
+      logged)
+        logged="$(grep -m1 -E '^logged:' "$f" | sed -E 's/^logged:[ \t]*//')"
+        age="$(days_since "$logged")"
+        [[ -n "$age" && "$age" -ge "$enact_due" ]] && stuck+="${name} (${age}d) "
+        ;;
+      accepted)
+        # Acceptance is a decision to carry a risk, not a way to make the alarm
+        # stop. It must name a date to look again, and it comes back then —
+        # otherwise `accepted` quietly becomes where lessons go to be forgotten.
+        review="$(grep -m1 -E '^review_on:' "$f" | sed -E 's/^review_on:[ \t]*//')"
+        if [[ -z "$review" ]]; then
+          expired+="${name} (無 review_on) "
+        else
+          rdays="$(days_since "$review")"
+          [[ -n "$rdays" && "$rdays" -ge 0 ]] && expired+="${name} (複審逾期 ${rdays}d) "
+        fi
+        ;;
+    esac
   done < <(find "${HOME_DIR}/lessons" -maxdepth 1 -name '*.md' 2>/dev/null | sort)
   [[ -n "$stuck" ]] && out+="🚨 coevolve: high-severity lesson still only written down → 跑 coevolve:enact — ${stuck}"$'\n'
+  [[ -n "$expired" ]] && out+="🚨 coevolve: 知情承擔的高嚴重度教訓該複審了 → 跑 coevolve:enact — ${expired}"$'\n'
 fi
 
 # ── pending predictions: cheap, and they expire in usefulness ──────────────────
