@@ -295,6 +295,59 @@ Tests were skipping silently, so coverage looked fine while nothing ran.
 - 2026-08-25 verified
 LES
     for i in $(seq 1 30); do fp "s$i" "2026-08-$(printf '%02d' $((i % 28 + 1)))" 70 2 0 5 >> "$dst/metrics/2026-08.jsonl"; done
+    # A denylisted name inside a histogram KEY, not prose. The gate catches it,
+    # but the fix is not obvious: dropping the key loses a real usage signal,
+    # and the value is a count that cannot simply be reworded.
+    sed -i 's/"skills":{}/"skills":{"acmecorp-deploy":4,"code-review":9}/' "$dst/metrics/2026-08.jsonl"
+    ;;
+
+  confounded-improvement)
+    # Enough sessions on both sides that `compare` returns a verdict — and the
+    # verdict is "improved". The trap is that the work changed at the same time:
+    # the after window is a different project, a third the size, with a
+    # different tool mix. The tool cannot see that. Only a run that interrogates
+    # its own clean result will.
+    base_config
+    cat > "$dst/lessons/L-2026-08-15-error-rate.md" <<'LES'
+---
+id: L-2026-08-15-error-rate
+severity: medium
+state: enacted
+enforcement: rule
+logged: 2026-08-10
+enacted: 2026-08-15
+verified:
+metric: derived.error_rate
+metric_direction: down
+baseline:
+evidence: 3
+---
+
+## What happened
+
+Tool errors were frequent enough during long integration sessions to be worth a rule.
+
+## Why it happened
+
+Commands were being run against the wrong environment.
+
+## How it gets enforced
+
+An always-loaded rule requiring the target environment to be named explicitly.
+
+## History
+
+- 2026-08-10 logged
+- 2026-08-15 enacted as a rule
+LES
+    # before: six large integration-shaped sessions, high error rate
+    for i in $(seq 1 6); do
+      printf '{"schema":"coevolve/session-metrics/1","session_id":"b%s","transcript_id":"tb%s","transcript_kind":"session","project_key":"proj_integration","label":null,"started_at":"2026-08-0%sT09:00:00.000Z","ended_at":"2026-08-0%sT18:00:00.000Z","span_days":0,"counts":{"lines":900,"parse_errors":0,"tool_calls":300,"tool_results":300,"tool_errors":30,"interrupts":2,"user_turns":40,"assistant_messages":300},"tools":{"Bash":210,"Edit":60,"Read":30},"skills":{"diagnose":1},"subagents":{},"models":{"claude-opus-5":300},"permission_modes":[],"modes":[],"tokens":{"input":10,"output":20,"cache_read":30,"cache_creation":5},"derived":{"error_rate":0.1,"interrupt_rate":0.006667,"bash_share":0.7,"turns_per_100_tool_calls":13.3,"skill_calls":1,"subagent_calls":0,"delegated_tool_call_share":0}}\n' "$i" "$i" "$i" "$i" >> "$dst/metrics/2026-08.jsonl"
+    done
+    # after: six small review-shaped sessions on a different project, low errors
+    for i in $(seq 1 6); do
+      printf '{"schema":"coevolve/session-metrics/1","session_id":"a%s","transcript_id":"ta%s","transcript_kind":"session","project_key":"proj_review_other","label":null,"started_at":"2026-08-2%sT09:00:00.000Z","ended_at":"2026-08-2%sT10:00:00.000Z","span_days":0,"counts":{"lines":200,"parse_errors":0,"tool_calls":90,"tool_results":90,"tool_errors":2,"interrupts":0,"user_turns":8,"assistant_messages":90},"tools":{"Read":60,"Bash":30},"skills":{"code-review":1},"subagents":{},"models":{"claude-opus-5":90},"permission_modes":[],"modes":[],"tokens":{"input":10,"output":20,"cache_read":30,"cache_creation":5},"derived":{"error_rate":0.022222,"interrupt_rate":0,"bash_share":0.333,"turns_per_100_tool_calls":8.9,"skill_calls":1,"subagent_calls":0,"delegated_tool_call_share":0}}\n' "$i" "$i" "$i" "$i" >> "$dst/metrics/2026-08.jsonl"
+    done
     ;;
 
   fresh-install)

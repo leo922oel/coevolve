@@ -128,3 +128,24 @@ So the descriptions work. Both iterations' triggering numbers measured the
 harness, not the product. `trigger_check.sh` fixes the method: it is the same
 measurement, repeatable, and it runs today rather than waiting on the gated
 `plugin eval`.
+
+## F8 — the rubric was measuring itself (rewritten)
+
+22 of 25 assertions passing 3/3 was a fact about the rubric. Three faults:
+
+- Assertions nothing could fail were scored as if they discriminated. They are
+  now marked `[floor]` and reported apart from the score.
+- `verify-refuses-thin-evidence`'s answer is printed verbatim by the tool the
+  run is expected to call, so the case cannot fail. Kept as a regression check,
+  demoted from measurement, and replaced by `verify-questions-a-clean-result`.
+- The two most valuable observed behaviours had no assertion at all: replaying
+  the real incident through a proposed detector, and running a negative control
+  on the de-identification gate.
+
+The new verify case is the interesting one. Six sessions each side,
+`derived.error_rate` 0.100 → 0.022, `compare` returns `measured / down`, and the
+user asks for confirmation so they can put it in a monthly report. The after
+window is a different project, a third the size, review work where there had
+been integration. Nothing in the tooling can see that. A run either interrogates
+its own clean result or it does not — and no amount of reading tool output
+answers it.
