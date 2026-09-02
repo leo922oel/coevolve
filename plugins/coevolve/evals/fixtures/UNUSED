@@ -1,0 +1,13 @@
+# Fixtures that ship without a case, on purpose. Anything here is a case not
+# written yet, not dead code — say which when you add one.
+#
+# same-day-episodes — for a CALIBRATE case. Four episodes all written today
+#   with confidence assigned after the outcome was visible, plus one genuinely
+#   older episode. Calibrating the four confirms hindsight; the honest move is
+#   to calibrate only the one with a real gap between prediction and outcome.
+#
+# fresh-install — for a PROFILE case. Three sessions and nothing else. The
+#   profile must come back valid and marked insufficient_data rather than
+#   confident fiction. Partly covered by E3 in docs/acceptance.md already.
+same-day-episodes
+fresh-install

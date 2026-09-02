@@ -619,6 +619,93 @@ LES
     unset COEVOLVE_FP_UNIFORM
     ;;
 
+  mixed-projects)
+    # The mirror of confounded-improvement. There the aggregate said "improved"
+    # and was wrong; here the aggregate says "worse" and is also wrong.
+    #
+    # The rule targeted one project. Inside that project it worked — 0.10 down
+    # to 0.02. But a second, untouched project grew to dominate the after
+    # window and got noisier, so the pooled number goes the wrong way. Reading
+    # the aggregate buries a change that actually worked.
+    #
+    # Unlike confounded-improvement, both windows DO contain the targeted
+    # project, so `--where project_key=…` yields a real like-for-like verdict
+    # with enough sessions on both sides. That is the whole point of the case:
+    # `compare` already tells you to re-run with --where when composition
+    # drifts, and this is where doing it changes the answer.
+    base_config
+    cat > "$dst/lessons/L-2026-08-15-plan-first.md" <<'LES'
+---
+id: L-2026-08-15-plan-first
+severity: medium
+state: enacted
+enforcement: rule
+logged: 2026-08-08
+enacted: 2026-08-15
+verified:
+metric: derived.error_rate
+metric_direction: down
+baseline:
+evidence: 3
+---
+
+## What happened
+
+Integration work on the deploy service accumulated tool errors: commands were
+retried against a target that was still moving, because nothing forced the
+change to be stated before the first command.
+
+## Why it happened
+
+The rule was scoped to that one service deliberately — it is where the cost
+was. Other work was left alone.
+
+## How it gets enforced
+
+An always-loaded rule requiring the intended change to be stated before the
+first command, in the deploy service only.
+
+## History
+
+- 2026-08-08 logged
+- 2026-08-15 enacted as a rule
+LES
+    #  sid  date        calls err int turns skill     project
+    # The targeted project, before: roughly one error in ten calls.
+    fp t1 2026-08-01 200 18 2 24 diagnose proj_deploy >> "$dst/metrics/2026-08.jsonl"
+    fp t2 2026-08-02 200 20 1 26 diagnose proj_deploy >> "$dst/metrics/2026-08.jsonl"
+    fp t3 2026-08-03 200 22 2 22 diagnose proj_deploy >> "$dst/metrics/2026-08.jsonl"
+    fp t4 2026-08-04 200 19 1 25 diagnose proj_deploy >> "$dst/metrics/2026-08.jsonl"
+    fp t5 2026-08-05 200 21 2 23 diagnose proj_deploy >> "$dst/metrics/2026-08.jsonl"
+    fp t6 2026-08-06 200 20 1 27 diagnose proj_deploy >> "$dst/metrics/2026-08.jsonl"
+    # A second project, before: the same error rate, so pooling looks harmless.
+    fp o1 2026-08-01 200 19 1 20 diagnose proj_billing >> "$dst/metrics/2026-08.jsonl"
+    fp o2 2026-08-02 200 21 2 21 diagnose proj_billing >> "$dst/metrics/2026-08.jsonl"
+    fp o3 2026-08-03 200 20 1 19 diagnose proj_billing >> "$dst/metrics/2026-08.jsonl"
+    fp o4 2026-08-04 200 22 2 22 diagnose proj_billing >> "$dst/metrics/2026-08.jsonl"
+    fp o5 2026-08-05 200 18 1 20 diagnose proj_billing >> "$dst/metrics/2026-08.jsonl"
+    fp o6 2026-08-06 200 20 2 21 diagnose proj_billing >> "$dst/metrics/2026-08.jsonl"
+    # The targeted project, after: the rule worked.
+    fp t7  2026-08-21 200  3 0 18 diagnose proj_deploy >> "$dst/metrics/2026-08.jsonl"
+    fp t8  2026-08-22 200  4 0 17 diagnose proj_deploy >> "$dst/metrics/2026-08.jsonl"
+    fp t9  2026-08-23 200  5 0 19 diagnose proj_deploy >> "$dst/metrics/2026-08.jsonl"
+    fp t10 2026-08-24 200  4 0 16 diagnose proj_deploy >> "$dst/metrics/2026-08.jsonl"
+    fp t11 2026-08-25 200  3 0 18 diagnose proj_deploy >> "$dst/metrics/2026-08.jsonl"
+    fp t12 2026-08-26 200  5 0 17 diagnose proj_deploy >> "$dst/metrics/2026-08.jsonl"
+    # The untouched project, after: more of it, and noisier. This is what drags
+    # the pooled number the wrong way.
+    fp o7  2026-08-21 200 34 3 23 diagnose proj_billing >> "$dst/metrics/2026-08.jsonl"
+    fp o8  2026-08-22 200 36 2 24 diagnose proj_billing >> "$dst/metrics/2026-08.jsonl"
+    fp o9  2026-08-23 200 38 3 22 diagnose proj_billing >> "$dst/metrics/2026-08.jsonl"
+    fp o10 2026-08-24 200 35 2 25 diagnose proj_billing >> "$dst/metrics/2026-08.jsonl"
+    fp o11 2026-08-25 200 37 3 23 diagnose proj_billing >> "$dst/metrics/2026-08.jsonl"
+    fp o12 2026-08-26 200 36 2 24 diagnose proj_billing >> "$dst/metrics/2026-08.jsonl"
+    fp o13 2026-08-27 200 35 3 22 diagnose proj_billing >> "$dst/metrics/2026-08.jsonl"
+    fp o14 2026-08-28 200 38 2 25 diagnose proj_billing >> "$dst/metrics/2026-08.jsonl"
+    fp o15 2026-08-29 200 36 3 23 diagnose proj_billing >> "$dst/metrics/2026-08.jsonl"
+    fp o16 2026-08-30 200 37 2 24 diagnose proj_billing >> "$dst/metrics/2026-08.jsonl"
+    ;;
+
   fresh-install)
     # Three sessions and nothing else. A confident profile here would be fiction.
     base_config
