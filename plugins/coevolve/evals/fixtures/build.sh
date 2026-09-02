@@ -465,6 +465,76 @@ LES
     sed -i 's/"skills":{}/"skills":{"code-review":1}/' "$dst/metrics/2026-08.jsonl"
     ;;
 
+  drift-is-the-effect)
+    # composition_drift will fire — and firing is correct while the conclusion
+    # it suggests is wrong. The rule under test was meant to make integration
+    # sessions shorter and less command-heavy, so the composition changing IS
+    # the effect. A run that reads the flag and calls "confound" gets the right
+    # word for the wrong reason, and buries a change that actually worked.
+    base_config
+    cat > "$dst/lessons/L-2026-08-15-plan-first.md" <<'LES'
+---
+id: L-2026-08-15-plan-first
+severity: medium
+state: enacted
+enforcement: rule
+logged: 2026-08-08
+enacted: 2026-08-15
+verified:
+metric: derived.error_rate
+metric_direction: down
+baseline:
+evidence: 4
+---
+
+## What happened
+
+Long integration sessions drifted: work started without a plan, ran for hours,
+and accumulated tool errors as commands were retried against a moving target.
+
+## Why it happened
+
+Nothing forced a plan before the first command, so the session found its shape
+as it went.
+
+## How it gets enforced
+
+An always-loaded rule requiring the change to be stated before the first
+command in an integration session. The intended effect is fewer, shorter,
+less command-heavy sessions — so the shape of the work is expected to change.
+
+## History
+
+- 2026-08-08 logged
+- 2026-08-15 enacted as a rule
+LES
+    # Same project throughout. Sessions get shorter and less Bash-heavy after
+    # the split, which is what the rule was for.
+    for i in $(seq 1 6); do
+      e=$((26 + i)); c=300; b=215
+      rate="$(awk -v e="$e" -v c="$c" 'BEGIN{printf "%.6f", e/c}')"
+      printf '{"schema":"coevolve/session-metrics/1","session_id":"b%s","transcript_id":"tb%s","transcript_kind":"session","project_key":"proj_integration","label":null,"started_at":"2026-08-0%sT09:00:00.000Z","ended_at":"2026-08-0%sT17:00:00.000Z","span_days":0,"counts":{"lines":900,"parse_errors":0,"tool_calls":%s,"tool_results":%s,"tool_errors":%s,"interrupts":2,"user_turns":38,"assistant_messages":%s},"tools":{"Bash":%s,"Read":85},"skills":{"diagnose":1},"subagents":{},"models":{"claude-opus-5":%s},"permission_modes":[],"modes":[],"tokens":{"input":10,"output":20,"cache_read":30,"cache_creation":5},"derived":{"error_rate":%s,"interrupt_rate":0.0067,"bash_share":0.716667,"turns_per_100_tool_calls":12.7,"skill_calls":1,"subagent_calls":0,"delegated_tool_call_share":0}}\n' \
+        "$i" "$i" "$i" "$i" "$c" "$c" "$e" "$c" "$b" "$c" "$rate" >> "$dst/metrics/2026-08.jsonl"
+    done
+    for i in $(seq 1 6); do
+      e=$((3 + i % 3)); c=120; b=55
+      rate="$(awk -v e="$e" -v c="$c" 'BEGIN{printf "%.6f", e/c}')"
+      printf '{"schema":"coevolve/session-metrics/1","session_id":"a%s","transcript_id":"ta%s","transcript_kind":"session","project_key":"proj_integration","label":null,"started_at":"2026-08-2%sT09:00:00.000Z","ended_at":"2026-08-2%sT12:00:00.000Z","span_days":0,"counts":{"lines":400,"parse_errors":0,"tool_calls":%s,"tool_results":%s,"tool_errors":%s,"interrupts":0,"user_turns":14,"assistant_messages":%s},"tools":{"Bash":%s,"Read":65},"skills":{"diagnose":1},"subagents":{},"models":{"claude-opus-5":%s},"permission_modes":[],"modes":[],"tokens":{"input":10,"output":20,"cache_read":30,"cache_creation":5},"derived":{"error_rate":%s,"interrupt_rate":0,"bash_share":0.458333,"turns_per_100_tool_calls":11.7,"skill_calls":1,"subagent_calls":0,"delegated_tool_call_share":0}}\n' \
+        "$i" "$i" "$i" "$i" "$c" "$c" "$e" "$c" "$b" "$c" "$rate" >> "$dst/metrics/2026-08.jsonl"
+    done
+    ;;
+
+  expired-transcript)
+    # A flag older than the transcript it points at. The fingerprint taken at
+    # capture time is still there; the narrative is not. Dropping the episode
+    # loses measurements that are sitting on disk.
+    base_config
+    printf -- '- [2026-07-20 14:02] (auto) 跨環境部署腳本重寫 — 268 tool calls → review: /home/leo/.claude/projects/-home-example-proj/9c1f4a02-7b3e-4d51-a8c9-1e2f3a4b5c6d.jsonl\n' >> "$dst/inbox.md"
+    printf -- '- [2026-08-30 11:15] (auto) 設定面板效能分析 — 142 tool calls → review: /home/leo/.claude/projects/-home-example-proj/2b8e7d13-4c5a-4e62-9f10-3a4b5c6d7e8f.jsonl\n' >> "$dst/inbox.md"
+    printf '{"schema":"coevolve/session-metrics/1","session_id":"S-old","transcript_id":"9c1f4a02-7b3e-4d51-a8c9-1e2f3a4b5c6d","transcript_kind":"session","project_key":"proj_deploy","label":null,"started_at":"2026-07-20T05:10:00.000Z","ended_at":"2026-07-20T09:40:00.000Z","span_days":0,"counts":{"lines":760,"parse_errors":0,"tool_calls":268,"tool_results":268,"tool_errors":9,"interrupts":3,"user_turns":31,"assistant_messages":268},"tools":{"Bash":180,"Edit":52,"Read":36},"skills":{"diagnose":1,"jira-connector":1},"subagents":{"Explore":2},"models":{"claude-opus-5":268},"permission_modes":[],"modes":[],"tokens":{"input":90,"output":240,"cache_read":800,"cache_creation":40},"derived":{"error_rate":0.033582,"interrupt_rate":0.011194,"bash_share":0.671642,"turns_per_100_tool_calls":11.6,"skill_calls":2,"subagent_calls":2,"delegated_tool_call_share":0.19}}\n' >> "$dst/metrics/2026-07.jsonl"
+    printf '{"schema":"coevolve/session-metrics/1","session_id":"S-new","transcript_id":"2b8e7d13-4c5a-4e62-9f10-3a4b5c6d7e8f","transcript_kind":"session","project_key":"proj_ui","label":null,"started_at":"2026-08-30T03:20:00.000Z","ended_at":"2026-08-30T05:05:00.000Z","span_days":0,"counts":{"lines":410,"parse_errors":0,"tool_calls":142,"tool_results":142,"tool_errors":2,"interrupts":0,"user_turns":12,"assistant_messages":142},"tools":{"Read":70,"Bash":50,"Edit":22},"skills":{"diagnose":1},"subagents":{},"models":{"claude-opus-5":142},"permission_modes":[],"modes":[],"tokens":{"input":40,"output":110,"cache_read":300,"cache_creation":20},"derived":{"error_rate":0.014085,"interrupt_rate":0,"bash_share":0.352113,"turns_per_100_tool_calls":8.5,"skill_calls":1,"subagent_calls":0,"delegated_tool_call_share":0}}\n' >> "$dst/metrics/2026-08.jsonl"
+    ;;
+
   fresh-install)
     # Three sessions and nothing else. A confident profile here would be fiction.
     base_config
