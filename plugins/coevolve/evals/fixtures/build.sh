@@ -570,6 +570,55 @@ LES
       >> "$dst/metrics/2026-08.jsonl"
     ;;
 
+  degenerate-baseline)
+    # A lesson whose natural metric is right there in the fingerprint, and a
+    # store that cannot support it: twenty-four sessions, deliberately uniform.
+    # `baseline` reports n well above the floor and `usable: false`. ENACT is
+    # supposed to say so before applying anything, because enactment is the last
+    # moment the user can do something about it.
+    base_config
+    cat > "$dst/lessons/L-2026-08-05-wrong-environment.md" <<'LES'
+---
+id: L-2026-08-05-wrong-environment
+severity: high
+state: logged
+enforcement: none
+logged: 2026-08-05
+enacted:
+verified:
+review_on:
+observable_check:
+metric:
+metric_direction:
+baseline:
+evidence: 4
+---
+
+## What happened
+
+Commands were run against the wrong environment four times in three weeks. Twice
+it was a staging database, twice a colleague's branch deployment. Each cost
+between twenty minutes and half a day to notice and undo.
+
+## Why it happened
+
+The target environment is implicit in the shell's state rather than stated in
+the command, so a command that was correct in one terminal is wrong in another
+and looks identical.
+
+## History
+
+- 2026-08-05 logged
+LES
+    COEVOLVE_FP_UNIFORM=1
+    export COEVOLVE_FP_UNIFORM
+    for i in $(seq 1 24); do
+      fp "s$i" "2026-08-$(printf '%02d' $((i % 28 + 1)))" 120 3 0 8 diagnose proj_deploy \
+        >> "$dst/metrics/2026-08.jsonl"
+    done
+    unset COEVOLVE_FP_UNIFORM
+    ;;
+
   fresh-install)
     # Three sessions and nothing else. A confident profile here would be fiction.
     base_config
