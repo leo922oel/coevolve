@@ -330,3 +330,30 @@ running now and asks whether a run discovers `--where` on its own. Adding
 automatic drift detection mid-flight would answer that question for it and make
 the three runs incomparable — the same discipline that deferred the F9 fixture
 fix.
+
+## F17 — the recovery path exists and nothing tells the skill to use it (deferred)
+
+Raised by a run noticing that the fixture's inbox pointed at transcripts which
+were not there. That part was a fixture artifact, but checking the real store
+turned up something worth fixing.
+
+Of 174 transcript pointers in the archived inbox flags, 97 point at files that
+no longer exist. All 97 predate coevolve — they are worklog-era flags from a
+time when no fingerprint was taken, so the evidence really is gone, and that is
+just history.
+
+What matters is the structural property, and it holds: a flag written now has a
+fingerprint stored under the same `transcript_id`, because the Stop hook takes
+both in the same moment. Verified directly rather than inferred from the absence
+of dead pointers in recent archives — those transcripts simply have not expired
+yet, which proves nothing.
+
+So evidence survives transcript expiry. **But `curate` has no idea.** It contains
+no mention of a transcript possibly being gone, and no instruction to fall back
+to the fingerprint keyed by the path's stem. A run curating a five-week-old flag
+hits a missing file with nothing to fall back on, and will most likely drop the
+episode or guess at it — losing an episode whose measurements were sitting right
+there.
+
+Fix: say so in `curate`, and have it join on `transcript_id` when the file is
+gone. Deferred until iteration 5 finishes, for the same reason as F16.
