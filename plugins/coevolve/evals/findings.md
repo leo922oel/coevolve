@@ -530,3 +530,32 @@ Separately, the code inconsistency F23 exposed is real even though it cannot
 fire here: the roll-up computes delegation only from separate subagent rows and
 silently discards the fingerprint's own `delegated_tool_call_share`. Two fields
 that should agree can disagree with nothing to notice. Worth reconciling.
+
+## F24 — the jitter reaches the total and stops there (deferred, minor)
+
+`fp()` varies the tool-call total and scales errors with it. It does not vary
+`user_turns`, so a caller passing one turn count produces six sessions with
+exactly 38 turns before the split and exactly 14 after. A run noticed
+immediately: "真實的 session 不會這樣", and discounted the effect size while
+keeping the direction.
+
+Same shape as F14, F19 and F20 — the fix reached the field that was reported and
+not the property that was broken. Sixth instance, and by now the recurrence is
+more interesting than any of the individual cases.
+
+It changed no conclusion: `distinct_sessions` still varies through tool_calls,
+the guard does not fire, and the run reached the right verdict with the right
+caveat. Worth fixing because a reader who spots one unrealistic field starts
+doubting the rest, which costs analysis time — that is precisely what happened
+here, and it is the same cost F22 was about.
+
+Deferred until iteration 7 finishes.
+
+### A note on where the findings are coming from now
+
+F24 is about the eval's own polish, not the product. Iterations 1 to 5 found
+defects in the system; 6 and 7 are increasingly finding defects in the fixtures
+and in the previous fixes. That is a reasonable signal that this line of testing
+is approaching its useful end, and that the next round of value comes from
+running the loop on real data over real weeks rather than from more synthetic
+cases.
