@@ -494,3 +494,39 @@ where the missing state was `accepted`.
 
 Held as provisional until the other two runs of this case land — if they diverge
 on the state, it is a judgement call rather than a gap.
+
+## F22 — the fixtures generate states the extractor cannot produce (root cause of F9, F20, F23)
+
+Four separate findings across three iterations, each reported as its own defect:
+
+| | what a run noticed | iteration |
+|---|---|---|
+| F9 | every session in a group carries an identical metric value | 3 |
+| F20 | tool_calls, turns and duration identical across a window | 6 |
+| F22 | token fields byte-identical on all twelve rows — "almost certainly a hardcoded extractor" | 6 |
+| F23 | a main transcript reporting `delegated_tool_call_share: 0.19` | 6 |
+
+One cause. `fp()` in `build.sh` is hand-written JSON shaped to look plausible,
+so it can — and does — emit states `session_metrics.py` would never produce. The
+last one is the clearest: Claude Code writes subagent work to separate
+`agent-*.jsonl` files, so a main transcript's delegated share is always 0 on a
+real machine. Verified against the real store: 188 main transcripts, zero inner
+sidechain calls. The 24.3% delegation figure distilled into the playbook is
+unaffected and correct.
+
+The runs were right to flag all four, and right for a reason worth keeping: a
+reader cannot tell an unrealistic fixture from a broken extractor, so the honest
+response to impossible-looking data is to doubt the instrument. One run said
+exactly that and refused to quote its own -66% externally until the extractor
+was checked.
+
+Patching the four is the mistake this session has now made three times (F14,
+F19, F20). The property, not the instances: **fixtures should be produced by
+running `session_metrics.py` over synthetic transcripts**, so every fixture is
+by construction a state the extractor can emit. Variance, field consistency and
+impossible combinations all stop being things to remember.
+
+Separately, the code inconsistency F23 exposed is real even though it cannot
+fire here: the roll-up computes delegation only from separate subagent rows and
+silently discards the fingerprint's own `delegated_tool_call_share`. Two fields
+that should agree can disagree with nothing to notice. Worth reconciling.
