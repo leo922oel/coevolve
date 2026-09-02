@@ -545,9 +545,12 @@ more interesting than any of the individual cases.
 
 It changed no conclusion: `distinct_sessions` still varies through tool_calls,
 the guard does not fire, and the run reached the right verdict with the right
-caveat. Worth fixing because a reader who spots one unrealistic field starts
-doubting the rest, which costs analysis time — that is precisely what happened
-here, and it is the same cost F22 was about.
+caveat. But calling it cosmetic was wrong. **Three separate runs have now spent
+analysis on "is the instrument broken?"** — listing exact regularities
+(`user_turns` all 38, `interrupts` all 2, `lines = 2 × calls + 41`) and one
+explicitly refusing to trust the numbers until the collector had been checked.
+That is real time spent, on every run, and it is exactly the cost F22 was
+about.
 
 Deferred until iteration 7 finishes.
 
@@ -588,3 +591,12 @@ Verified extractable against a real transcript.
 Adding them changes what VERIFY can ask: not only "did the friction fall" but
 "did it fall while the work held". Deferred until iteration 7 finishes, since
 it changes the extractor those runs are reading.
+
+**Confirmed twice in the same round, the second time more precisely.** A second
+run decomposed the shrinkage by user turn: turns per session fell 38 to 14 while
+tool calls *per turn* rose slightly, 7.2-8.1 to 7.9-8.8. So the sessions did not
+get cheaper per request — there were fewer requests in them. That is a different
+story from "the rule made work more efficient", and the two are indistinguishable
+without an output measure. The first run could only say output "probably" fell
+with it; the second could show where the shrinkage came from and still could not
+say whether anything less got delivered.
