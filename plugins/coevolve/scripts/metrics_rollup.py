@@ -248,6 +248,69 @@ def _sum_maps(rows, key) -> Counter:
     return total
 
 
+def _load_baseline(path: Path, metric: str):
+    """A before-window snapshot taken at enactment time.
+
+    The before side of a comparison is closed the moment a change ships: every
+    session earlier than the split has already happened. Recomputing it later
+    therefore depends entirely on transcripts that expire, which is how a lesson
+    ends up permanently unverifiable. Capturing the baseline while the data
+    exists is the only thing that survives that.
+    """
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if isinstance(data, dict) and isinstance(data.get("baseline"), dict):
+        data = data["baseline"]          # tolerate a whole lesson record
+    if not isinstance(data, dict) or "n" not in data or "mean" not in data:
+        raise ValueError("a baseline snapshot needs at least 'n' and 'mean'")
+    stored_metric = data.get("metric")
+    if stored_metric and stored_metric != metric:
+        # Comparing today's metric against yesterday's snapshot of a different
+        # one is worse than having no baseline, because it looks like a result.
+        raise ValueError(f"baseline is for {stored_metric!r}, not {metric!r}")
+    mean = float(data["mean"])
+    return {
+        "n": int(data["n"]),
+        "mean": mean,
+        "median": float(data.get("median", mean)),
+        "p90": float(data.get("p90", mean)),
+        "min": float(data.get("min", mean)),
+        "max": float(data.get("max", mean)),
+        "captured": data.get("captured", ""),
+    }
+
+
+def cmd_baseline(rows, args) -> int:
+    """Snapshot one metric's before-window, for a lesson to carry.
+
+    Run at enactment time, while the sessions that will become "before" are
+    still in the store. After that the window is closed and the transcripts
+    behind it start expiring, so this is the last moment the number exists.
+    """
+    from datetime import date
+
+    subset = [r for r in rows if (r.get("started_at") or "")[:10] < args.until]
+    values = []
+    for row in subset:
+        val = _dig(row, args.metric)
+        if val is None:
+            print(f"metrics_rollup: unknown metric path: {args.metric}", file=sys.stderr)
+            return 2
+        values.append(val)
+    stats = _stats(values)
+    stats.update({
+        "metric": args.metric,
+        "captured_until": args.until,
+        "captured": date.today().isoformat(),
+        # Said plainly at capture time: a baseline this thin will never support a
+        # verdict, and enactment is the only moment when anything can be done.
+        "too_thin": stats["n"] < args.min_n,
+        "min_n": args.min_n,
+    })
+    json.dump(stats, sys.stdout, ensure_ascii=False, indent=2)
+    sys.stdout.write("\n")
+    return 0
+
+
 def cmd_compare(rows, args) -> int:
     before_rows = [r for r in rows if (r.get("started_at") or "")[:10] < args.split]
     after_rows = [r for r in rows if (r.get("started_at") or "")[:10] >= args.split]
@@ -267,21 +330,51 @@ def cmd_compare(rows, args) -> int:
         print(f"metrics_rollup: unknown metric path: {exc.args[0]}", file=sys.stderr)
         return 2
 
+    before_stats = _stats(before)
+    baseline_source = "store"
+    if args.baseline_file:
+        try:
+            before_stats = _load_baseline(args.baseline_file, args.metric)
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            print(f"metrics_rollup: {exc}", file=sys.stderr)
+            return 2
+        baseline_source = "snapshot"
+
     result = {
         "metric": args.metric,
         "split": args.split,
         "min_n": args.min_n,
-        "before": _stats(before),
+        "baseline_source": baseline_source,
+        "before": before_stats,
         "after": _stats(after),
     }
-    if len(before) < args.min_n or len(after) < args.min_n:
+    before_thin = before_stats["n"] < args.min_n
+    after_thin = len(after) < args.min_n
+    if before_thin or after_thin:
         # Naming a direction here would let the loop retire a real lesson on
-        # noise, which is worse than leaving it open.
+        # noise, which is worse than leaving it open. But *which* side is thin
+        # decides what the user should do, and the two are nothing alike.
         result["verdict"] = "insufficient evidence"
-        result["note"] = (f"need >= {args.min_n} sessions on each side; "
-                          f"have {len(before)} before and {len(after)} after")
+        result["blocked_by"] = ("both" if before_thin and after_thin
+                                else "before_window" if before_thin else "after_window")
+        notes = []
+        if before_thin and baseline_source == "snapshot":
+            notes.append(
+                f"the stored baseline holds only {before_stats['n']} sessions, below the "
+                f"floor of {args.min_n}; it was captured too late to support a verdict")
+        elif before_thin:
+            notes.append(
+                f"the before window is closed - every session earlier than {args.split} has "
+                f"already happened, so waiting changes nothing. Only a backfill of transcripts "
+                f"still on disk can widen it, and transcripts age out after about 30 days, so "
+                f"that option is expiring. In future, capture a baseline at enactment time")
+        if after_thin:
+            notes.append(
+                f"the after window is still filling: {len(after)} of {args.min_n} sessions "
+                f"since {args.split}. This one resolves on its own as more sessions accumulate")
+        result["note"] = "; ".join(notes)
     else:
-        b, a = result["before"]["mean"], result["after"]["mean"]
+        b, a = before_stats["mean"], result["after"]["mean"]
         scale = max(abs(b), 1e-9)
         change = (a - b) / scale
         result["verdict"] = "measured"
@@ -308,6 +401,13 @@ def main(argv=None) -> int:
                          help="aggregate statistics over a date window")
     win.add_argument("--since"), win.add_argument("--until")
 
+    base = sub.add_parser("baseline", parents=[common],
+                          help="snapshot one metric's before-window, to store in a lesson")
+    base.add_argument("--metric", required=True)
+    base.add_argument("--until", required=True,
+                      help="YYYY-MM-DD the change takes effect; sessions before this are the baseline")
+    base.add_argument("--min-n", type=int, default=5)
+
     cmp_ = sub.add_parser("compare", parents=[common],
                           help="before/after comparison around a split date")
     cmp_.add_argument("--metric", required=True,
@@ -315,6 +415,9 @@ def main(argv=None) -> int:
     cmp_.add_argument("--split", required=True, help="YYYY-MM-DD the change took effect")
     cmp_.add_argument("--min-n", type=int, default=5,
                       help="minimum sessions per side before a direction is named")
+    cmp_.add_argument("--baseline-file", type=Path, default=None,
+                      help="a before-window snapshot captured at enactment time; used "
+                           "instead of re-deriving the before window from the store")
 
     args = parser.parse_args(argv)
     store = args.store or default_store()
@@ -324,6 +427,8 @@ def main(argv=None) -> int:
         return cmd_sessions(rows, args)
     if args.command == "window":
         return cmd_window(rows, args)
+    if args.command == "baseline":
+        return cmd_baseline(rows, args)
     return cmd_compare(rows, args)
 
 

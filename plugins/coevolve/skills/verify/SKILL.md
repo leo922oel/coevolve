@@ -24,6 +24,10 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/metrics_rollup.py" compare \
   --metric derived.interrupt_rate --split 2026-08-20 --min-n 5
 ```
 
+If the lesson carries a `baseline:` snapshot, write it to a file and pass
+`--baseline-file`. A snapshot taken at enactment beats one re-derived now:
+transcripts expire, so re-deriving quietly measures whatever survived.
+
 Use the metric written in the lesson. Do not substitute a different one because
 it looks better — that is the whole reason it was chosen in advance.
 
@@ -31,6 +35,19 @@ The tool reports both windows side by side, and returns
 `verdict: insufficient evidence` when either side is thinner than `--min-n`. Do
 not talk past that. A lesson retired on two sessions of noise is worse than one
 left open, because the real problem is now marked solved.
+
+**When it refuses, read `blocked_by` before saying anything — the two cases call
+for opposite advice:**
+
+- `after_window` — the change is too recent. This resolves by itself; say roughly
+  how many more sessions are needed and move on.
+- `before_window` — the comparison is **stuck, not pending**. Every session
+  earlier than the split has already happened, so waiting will never help, and
+  the transcripts that could still widen it are expiring. Telling the user to
+  check back later here is actively wrong: it converts a fixable problem into a
+  lesson that sits in `enacted` forever. Say plainly that the only route is to
+  run `backfill_metrics.py` now, or to accept a qualitative check — and that the
+  window on the first option is closing.
 
 ## 3. Read the result like an adult
 

@@ -11,6 +11,12 @@ retired:
 # Choosing it afterwards is metric shopping, and it always finds a win.
 metric:
 metric_direction: down | up
+# The before-window, snapshotted at enactment. This is not a convenience: the
+# before side closes the moment the change ships, and the transcripts behind it
+# expire in about a month. Without this the lesson becomes unverifiable and sits
+# in `enacted` forever.
+#   metrics_rollup.py baseline --metric <metric> --until <enacted date>
+baseline:
 evidence:
 ---
 

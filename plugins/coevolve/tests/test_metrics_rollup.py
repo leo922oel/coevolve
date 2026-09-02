@@ -144,6 +144,71 @@ class CompareTest(unittest.TestCase):
         self.assertEqual(out["before"]["n"], 2)
         self.assertEqual(out["after"]["n"], 2)
 
+    def test_d4_a_thin_after_window_is_reported_as_still_filling(self):
+        self.seed(6, 2, before_err=10, after_err=2)
+        out = self.compare(min_n=5)
+        self.assertEqual(out["blocked_by"], "after_window")
+        self.assertIn("more sessions", out["note"])
+
+    def test_d4_a_thin_before_window_is_reported_as_closed_not_pending(self):
+        """The before side cannot grow: every session earlier than the split has
+        already happened. Telling the user to wait would strand the lesson."""
+        self.seed(2, 6, before_err=10, after_err=2)
+        out = self.compare(min_n=5)
+        self.assertEqual(out["blocked_by"], "before_window")
+        self.assertIn("backfill", out["note"].lower())
+        self.assertNotIn("more sessions", out["note"])
+
+    def test_d4_both_windows_thin_names_both(self):
+        self.seed(2, 2, before_err=10, after_err=2)
+        self.assertEqual(self.compare(min_n=5)["blocked_by"], "both")
+
+    def test_d5_a_stored_baseline_is_used_instead_of_the_store(self):
+        # Only after-side sessions survive; the baseline was captured at enactment.
+        self.seed(0, 6, before_err=0, after_err=2)
+        baseline = Path(self.tmp.name) / "baseline.json"
+        baseline.write_text(json.dumps(
+            {"n": 12, "mean": 0.1, "median": 0.1, "p90": 0.12, "min": 0.08, "max": 0.14,
+             "captured": "2026-08-20", "metric": "derived.error_rate"}), encoding="utf-8")
+        proc = run("compare", "--metric", "derived.error_rate", "--split", "2026-08-15",
+                   "--min-n", "5", "--baseline-file", str(baseline), store=self.store)
+        out = json.loads(proc.stdout)
+        self.assertEqual(out["verdict"], "measured")
+        self.assertEqual(out["direction"], "down")
+        self.assertEqual(out["baseline_source"], "snapshot")
+        self.assertEqual(out["before"]["n"], 12)
+
+    def test_d5_a_stored_baseline_must_still_be_thick_enough(self):
+        self.seed(0, 6, before_err=0, after_err=2)
+        baseline = Path(self.tmp.name) / "thin.json"
+        baseline.write_text(json.dumps({"n": 2, "mean": 0.1}), encoding="utf-8")
+        out = json.loads(run("compare", "--metric", "derived.error_rate", "--split",
+                             "2026-08-15", "--min-n", "5", "--baseline-file", str(baseline),
+                             store=self.store).stdout)
+        self.assertEqual(out["verdict"], "insufficient evidence")
+        self.assertEqual(out["blocked_by"], "before_window")
+
+    def test_d5_a_baseline_for_a_different_metric_is_refused(self):
+        """Comparing today's error rate against a snapshot of something else is
+        worse than having no baseline, because it looks like a result."""
+        self.seed(0, 6, before_err=0, after_err=2)
+        baseline = Path(self.tmp.name) / "wrong.json"
+        baseline.write_text(json.dumps(
+            {"n": 12, "mean": 0.1, "metric": "derived.interrupt_rate"}), encoding="utf-8")
+        proc = run("compare", "--metric", "derived.error_rate", "--split", "2026-08-15",
+                   "--baseline-file", str(baseline), store=self.store)
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("interrupt_rate", proc.stderr)
+
+    def test_d6_a_verdict_is_possible_with_no_before_sessions_left(self):
+        self.seed(0, 8, before_err=0, after_err=1)
+        baseline = Path(self.tmp.name) / "b.json"
+        baseline.write_text(json.dumps({"n": 20, "mean": 0.09}), encoding="utf-8")
+        out = json.loads(run("compare", "--metric", "derived.error_rate", "--split",
+                             "2026-08-15", "--min-n", "5", "--baseline-file", str(baseline),
+                             store=self.store).stdout)
+        self.assertEqual(out["verdict"], "measured")
+
     def test_d3_metric_is_echoed_so_the_choice_is_auditable(self):
         self.seed(6, 6, before_err=10, after_err=10)
         out = self.compare()
@@ -157,6 +222,51 @@ class CompareTest(unittest.TestCase):
                    store=self.store)
         self.assertNotEqual(proc.returncode, 0)
         self.assertIn("nope", proc.stderr)
+
+
+class BaselineCaptureTest(unittest.TestCase):
+    """C5 — enactment has to be able to take the snapshot in one command, or it
+    will not happen, and the snapshot is the whole fix."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.store = Path(self.tmp.name)
+        recs = [fingerprint(f"s{i}", f"t{i}", "session", f"2026-08-{i+1:02d}",
+                            tool_calls=100, errors=10) for i in range(8)]
+        recs += [fingerprint(f"a{i}", f"ta{i}", "session", f"2026-08-2{i}",
+                             tool_calls=100, errors=1) for i in range(3)]
+        with (self.store / "2026-08.jsonl").open("w", encoding="utf-8") as fh:
+            for r in recs:
+                fh.write(json.dumps(r) + "\n")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_baseline_emits_a_snapshot_for_one_metric_before_a_date(self):
+        out = json.loads(run("baseline", "--metric", "derived.error_rate",
+                             "--until", "2026-08-20", store=self.store).stdout)
+        self.assertEqual(out["metric"], "derived.error_rate")
+        self.assertEqual(out["n"], 8)
+        self.assertAlmostEqual(out["mean"], 0.1, places=6)
+        self.assertEqual(out["captured_until"], "2026-08-20")
+        self.assertIn("captured", out)
+
+    def test_the_snapshot_feeds_straight_back_into_compare(self):
+        snap = Path(self.tmp.name) / "b.json"
+        snap.write_text(run("baseline", "--metric", "derived.error_rate",
+                            "--until", "2026-08-20", store=self.store).stdout, encoding="utf-8")
+        out = json.loads(run("compare", "--metric", "derived.error_rate",
+                             "--split", "2026-08-20", "--min-n", "3",
+                             "--baseline-file", str(snap), store=self.store).stdout)
+        self.assertEqual(out["verdict"], "measured")
+        self.assertEqual(out["direction"], "down")
+
+    def test_a_thin_baseline_says_so_at_capture_time(self):
+        out = json.loads(run("baseline", "--metric", "derived.error_rate",
+                             "--until", "2026-08-02", store=self.store).stdout)
+        self.assertEqual(out["n"], 1)
+        self.assertTrue(out["too_thin"],
+                        "enactment must learn now that this metric can never be verified")
 
 
 class WindowTest(unittest.TestCase):

@@ -57,6 +57,7 @@ reaches an enforcement layer does not change behaviour, so state is tracked.
 | C2 | A `severity: high` lesson sitting in `state: logged` past `enact_due_days` is surfaced by `status` as the single top recommendation, ahead of curation and distillation. |
 | C3 | **Regression test against real history**: fed the 2026-07-06 credential lesson, the system escalates it and proposes a concrete enforcement artifact rather than another playbook bullet. |
 | C4 | State transitions are append-only and dated; a lesson's history is reconstructable. |
+| C5 | On enactment, a lesson records a **baseline snapshot** of its registered metric, taken while the data still exists — and enactment warns when that baseline is already too thin to ever support a verdict. |
 
 ## D. `verify` — did the change actually change behaviour
 
@@ -65,6 +66,18 @@ reaches an enforcement layer does not change behaviour, so state is tracked.
 | D1 | Given an enacted lesson and its enactment date, pulls the relevant metric from sessions before and after, and reports both windows side by side. |
 | D2 | With too few sessions on either side, reports `insufficient evidence` and refuses to state a verdict. Never manufactures a trend from n=1. |
 | D3 | The metric being compared is named in the lesson's enactment record, chosen *before* the outcome is known — no post-hoc metric shopping. |
+| D4 | Distinguishes a thin **after** window from a thin **before** window, and says which is blocking. They are not the same problem: the after side fills as you work, the before side is closed forever. |
+| D5 | Accepts a **baseline snapshot stored at enactment time** and compares against it instead of re-deriving the before window, so a lesson stays verifiable after its transcripts age out. |
+| D6 | With an adequate stored baseline, produces a verdict even when the store holds no before-side sessions at all. |
+
+> **Why D4-D6 exist** — found by the first eval run, not by design. VERIFY
+> correctly refused a verdict on two sessions per side, then pointed out that the
+> before side can never grow: sessions earlier than the enactment date are
+> already all the sessions there will ever be. Transcripts age out in about 30
+> days, so the one recovery route expires too. A correct refusal had turned into
+> a permanent stall, and every lesson enacted early in a store's life was
+> unverifiable forever. D2 was right and incomplete: refusing thin evidence only
+> helps if the evidence can still arrive.
 
 ## E. `profile` — the portable cowork profile
 

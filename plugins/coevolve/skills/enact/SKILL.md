@@ -68,6 +68,27 @@ finds a win. If no fingerprint metric can show this — many lessons are like th
 — name the observable check instead ("no secret-shaped string appears in a
 transcript for 30 days") and say who checks it.
 
+**Then snapshot the baseline, in the same breath.** This is the step that is
+easy to skip and impossible to redo:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/metrics_rollup.py" baseline \
+  --metric derived.interrupt_rate --until <today>
+```
+
+Paste the result into the lesson's `baseline:` field. The before-window closes
+the instant the change ships — every session earlier than today has already
+happened — and the transcripts behind it age out in about a month. Capture it
+now and the comparison stays possible forever; skip it and the lesson can become
+permanently unverifiable, which is exactly how a loop quietly turns back into a
+diary.
+
+If the snapshot comes back `"too_thin": true`, say so **before** applying
+anything. The user then has a real choice while it is still available: run
+`backfill_metrics.py` to sweep up transcripts still on disk, pick a metric with
+more history behind it, or accept a qualitative check instead. After enactment
+that choice is gone.
+
 ## 4. Propose the artifact in full
 
 Show the actual content, not a description of it:
