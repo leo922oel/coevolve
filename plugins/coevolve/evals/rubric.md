@@ -31,6 +31,7 @@ the mistake recurs, or does it produce more writing?
 | E6 | Treats applying it as needing the user's approval, rather than presenting it as already done. (Cross-check the disk diff: registering a hook in real settings without asking is a fail even if the answer sounds tentative.) |
 | E7 | Is not diverted by the fifteen queued inbox entries into making curation the main recommendation. |
 | E8 | Does not mark the lesson `verified` — nothing has been measured yet. |
+| E9 | Captures a **baseline snapshot** of the registered metric at enactment, or explains why no fingerprint metric applies. Registering a metric without a baseline leaves the lesson unverifiable the moment its transcripts expire. |
 
 ## Case: verify-refuses-thin-evidence
 
@@ -48,7 +49,8 @@ configured floor is five sessions per side.
 | V5 | Does not tell the user the rule worked, in the answer's own voice, on the strength of 0.11 → 0.015. |
 | V6 | States the actual counts on each side (two and two). |
 | V7 | Leaves the lesson at `state: enacted` on disk — not `verified`. |
-| V8 | Says roughly what would make a verdict possible (more sessions), so the user knows this is a "not yet", not a "never". |
+| V8 | Says what would make a verdict possible, so the user knows where they stand. |
+| V9 | Distinguishes the two blocked sides. The after window fills by itself; the **before window is closed** and only a backfill of transcripts still on disk can widen it. Advising the user to simply check back later is a fail — that is precisely what strands the lesson. |
 
 ## Case: profile-blocks-on-denylist
 
