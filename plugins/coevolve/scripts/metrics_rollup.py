@@ -183,6 +183,36 @@ def _stats(values: list[float]) -> dict:
     }
 
 
+def apply_filters(rows, wheres):
+    """Restrict to a subpopulation before comparing.
+
+    Every eval run that met a confounded result reached the same conclusion —
+    compare like with like, inside one project — and none of them could express
+    it, because this did not exist. A tool that can diagnose a confound and not
+    control for it leaves the correct next step unreachable.
+
+    An unknown field is an error rather than an empty result: silently comparing
+    nothing looks identical to comparing something and finding no sessions.
+    """
+    if not wheres:
+        return rows, None
+    parsed = []
+    for clause in wheres:
+        if "=" not in clause:
+            raise ValueError(f"--where needs field=value, got {clause!r}")
+        field, value = clause.split("=", 1)
+        parsed.append((field.strip(), value.strip()))
+    known = set()
+    for row in rows:
+        known.update(k for k, v in row.items() if isinstance(v, (str, int, float)))
+    for field, _ in parsed:
+        if rows and field not in known:
+            raise ValueError(f"unknown field {field!r}; try one of: "
+                             + ", ".join(sorted(known)[:12]))
+    kept = [r for r in rows if all(str(r.get(f, "")) == v for f, v in parsed)]
+    return kept, list(wheres)
+
+
 def _in_window(row, since, until) -> bool:
     day = (row.get("started_at") or "")[:10]
     if since and day < since:
@@ -200,10 +230,16 @@ def cmd_sessions(rows, _args) -> int:
 
 
 def cmd_window(rows, args) -> int:
+    try:
+        rows, applied = apply_filters(rows, args.where)
+    except ValueError as exc:
+        print(f"metrics_rollup: {exc}", file=sys.stderr)
+        return 2
     rows = [r for r in rows if _in_window(r, args.since, args.until)]
     worked = [r for r in rows if r["tool_calls"] > 0]
     out = {
         "since": args.since or "", "until": args.until or "",
+        **({"where": applied} if applied else {}),
         "sessions": len(rows),
         "sessions_with_work": len(worked),
         # Pooled ratios, not averages of ratios. These are different numbers and
@@ -320,6 +356,11 @@ def cmd_baseline(rows, args) -> int:
 
 
 def cmd_compare(rows, args) -> int:
+    try:
+        rows, applied = apply_filters(rows, args.where)
+    except ValueError as exc:
+        print(f"metrics_rollup: {exc}", file=sys.stderr)
+        return 2
     before_rows = [r for r in rows if (r.get("started_at") or "")[:10] < args.split]
     after_rows = [r for r in rows if (r.get("started_at") or "")[:10] >= args.split]
 
@@ -356,6 +397,8 @@ def cmd_compare(rows, args) -> int:
         "before": before_stats,
         "after": _stats(after),
     }
+    if applied:
+        result["where"] = applied
     before_thin = before_stats["n"] < args.min_n
     after_thin = len(after) < args.min_n
     if before_thin or after_thin:
@@ -419,6 +462,8 @@ def main(argv=None) -> int:
     win = sub.add_parser("window", parents=[common],
                          help="aggregate statistics over a date window")
     win.add_argument("--since"), win.add_argument("--until")
+    win.add_argument("--where", action="append", metavar="FIELD=VALUE",
+                     help="restrict to a subpopulation, e.g. project_key=proj_x (repeatable)")
 
     base = sub.add_parser("baseline", parents=[common],
                           help="snapshot one metric's before-window, to store in a lesson")
@@ -434,6 +479,10 @@ def main(argv=None) -> int:
     cmp_.add_argument("--split", required=True, help="YYYY-MM-DD the change took effect")
     cmp_.add_argument("--min-n", type=int, default=5,
                       help="minimum sessions per side before a direction is named")
+    cmp_.add_argument("--where", action="append", metavar="FIELD=VALUE",
+                      help="compare like with like — e.g. project_key=proj_x, so a change "
+                           "in what you worked on cannot be read as a change in how it went "
+                           "(repeatable)")
     cmp_.add_argument("--baseline-file", type=Path, default=None,
                       help="a before-window snapshot captured at enactment time; used "
                            "instead of re-deriving the before window from the store")

@@ -235,6 +235,65 @@ class CompareTest(unittest.TestCase):
         self.assertFalse(out["degenerate_spread"])
         self.assertNotIn("caveat", out)
 
+    def _mixed(self):
+        """Two projects either side of the split, the way a real store looks."""
+        recs = []
+        for i in range(4):
+            recs.append(fingerprint(f"bi{i}", f"tbi{i}", "session", "2026-08-0%d" % (i + 1),
+                                    tool_calls=100, errors=10, project="proj_a"))
+            recs.append(fingerprint(f"bo{i}", f"tbo{i}", "session", "2026-08-0%d" % (i + 5),
+                                    tool_calls=100, errors=2, project="proj_b"))
+        for i in range(4):
+            recs.append(fingerprint(f"ai{i}", f"tai{i}", "session", "2026-08-2%d" % i,
+                                    tool_calls=100, errors=7, project="proj_a"))
+            recs.append(fingerprint(f"ao{i}", f"tao{i}", "session", "2026-08-2%d" % (i + 4),
+                                    tool_calls=100, errors=1, project="proj_b"))
+        with (self.store / "2026-08.jsonl").open("w", encoding="utf-8") as fh:
+            for r in recs:
+                fh.write(json.dumps(r) + "\n")
+
+    def test_d8_compare_can_be_restricted_to_one_subpopulation(self):
+        """Six eval runs across two iterations all concluded the same thing —
+        compare like with like, within one project — and none could express it."""
+        self._mixed()
+        out = json.loads(run("compare", "--metric", "derived.error_rate",
+                             "--split", "2026-08-15", "--min-n", "3",
+                             "--where", "project_key=proj_a", store=self.store).stdout)
+        self.assertEqual(out["before"]["n"], 4)
+        self.assertEqual(out["after"]["n"], 4)
+        self.assertAlmostEqual(out["before"]["mean"], 0.10, places=6)
+        self.assertAlmostEqual(out["after"]["mean"], 0.07, places=6)
+
+    def test_d8_the_filter_is_echoed_so_the_comparison_is_auditable(self):
+        self._mixed()
+        out = json.loads(run("compare", "--metric", "derived.error_rate",
+                             "--split", "2026-08-15", "--min-n", "3",
+                             "--where", "project_key=proj_a", store=self.store).stdout)
+        self.assertEqual(out["where"], ["project_key=proj_a"])
+
+    def test_d8_unfiltered_result_differs_which_is_the_point(self):
+        self._mixed()
+        out = json.loads(run("compare", "--metric", "derived.error_rate",
+                             "--split", "2026-08-15", "--min-n", "3",
+                             store=self.store).stdout)
+        self.assertEqual(out["before"]["n"], 8)
+        self.assertNotIn("where", out)
+
+    def test_d8_an_unknown_field_is_an_error_not_an_empty_window(self):
+        self._mixed()
+        proc = run("compare", "--metric", "derived.error_rate", "--split", "2026-08-15",
+                   "--where", "projekt=proj_a", store=self.store)
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("projekt", proc.stderr)
+
+    def test_d8_a_filter_that_empties_a_window_says_so(self):
+        self._mixed()
+        out = json.loads(run("compare", "--metric", "derived.error_rate",
+                             "--split", "2026-08-15", "--min-n", "3",
+                             "--where", "project_key=proj_nope", store=self.store).stdout)
+        self.assertEqual(out["verdict"], "insufficient evidence")
+        self.assertEqual(out["blocked_by"], "both")
+
     def test_d3_metric_is_echoed_so_the_choice_is_auditable(self):
         self.seed(6, 6, before_err=10, after_err=10)
         out = self.compare()

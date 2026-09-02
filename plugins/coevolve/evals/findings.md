@@ -278,3 +278,26 @@ Two smaller process notes from the same fix, both worth keeping:
 - The bug was invisible in review and obvious in one command. Running the hook
   against a two-lesson fixture took seconds; re-reading the diff had already
   missed it twice.
+
+
+## F15 — the tool could diagnose a confound but not control for it
+
+Six runs across two iterations, on two different versions of the fixture, all
+reached the same recommendation: compare like with like, inside one project.
+None of them could do it. `compare` had no way to restrict to a subpopulation,
+although `project_key` sits in every session record.
+
+Six independent runs converging on the same missing capability is a stronger
+signal than any single failure. It is also a shape worth recognising: the
+diagnosis was right, the tool made the correct next step unreachable, and every
+run therefore ended with advice instead of an answer.
+
+`--where field=value` now exists on `compare` and `window`, and is echoed in the
+result so a filtered comparison cannot be mistaken for an unfiltered one. On the
+confound fixture the two commands give opposite readings of the same data —
+`measured / down / -62.4%` unfiltered, and `insufficient evidence (after_window,
+0 of 5)` once restricted to the population the rule targets. The second is the
+truth, and it was one flag away the whole time.
+
+An unknown field errors rather than returning an empty window: comparing nothing
+and comparing something that yielded nothing look identical in the output.

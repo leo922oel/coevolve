@@ -75,7 +75,21 @@ Before concluding, ask one question of the data: **could something else explain
 this?** Compare the two windows on things the change could not have touched —
 project, session length, tool mix, task type. If those moved together with the
 metric, the work changed and the metric followed; say so rather than reporting a
-result the first question would demolish. A month with different work in it moves every metric. Where a
+result the first question would demolish.
+
+**When they did move together, do not stop at saying so — re-run inside one
+population:**
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/metrics_rollup.py" compare \
+  --metric derived.error_rate --split 2026-08-20 --where project_key=proj_x
+```
+
+Naming a confound and leaving it there hands the user a problem. The same data
+often answers honestly once it is compared like with like — frequently as
+`insufficient evidence` for the population the change actually targeted, which
+is a real answer and a much better one than a clean number about a population
+the change never touched. A month with different work in it moves every metric. Where a
 confounder is plausible, name it and lower the confidence rather than claiming a
 clean result — a verification stage that always confirms is just a slower way of
 guessing.
