@@ -458,3 +458,39 @@ caught it, and both times review did not.
 
 Deferred until iteration 6 finishes — `enact-accepts-with-a-check` is running
 now and calls `baseline`.
+
+## F20 — the degeneracy check looks at one column; independence is a property of the row (deferred)
+
+`degenerate_spread` compares `distinct_values` of the metric under test. Six
+sessions with identical `tool_calls`, `user_turns` and duration, differing only
+in error count, pass it cleanly — and are obviously not six independent
+observations. Verified directly: `degenerate_spread: false`, `distinct_values:
+6` and `3`, while every other field on every row is the same.
+
+Found by a run that had already accepted the verdict and was listing what it
+would still discount, which is the more valuable kind of finding: it did not
+change the conclusion, it changed how much the conclusion is worth.
+
+Adjacent to F19 rather than identical. F19 was a guard that did not reach its
+sibling function. This is a guard that examines one column when the property it
+exists to test — are these observations independent — is about the whole row.
+The common half is that the fix addressed the instance that was reported rather
+than the property that was broken.
+
+Proposed: derive degeneracy from the row, not the metric. Sessions identical
+across `tool_calls`, `user_turns` and duration should count once regardless of
+how the compared metric varies, and `compare` should report the effective count
+next to the nominal one.
+
+Deferred until iteration 6 finishes.
+
+### Provisional: no state for "verified, but provisionally"
+
+One run marked a lesson `verified` while stating medium confidence, four
+explicit discounts, and a recommendation to re-check in one to two weeks. The
+analysis was careful and the state machine gave it nothing better: `enacted`
+understates a real, bounded result, `verified` overstates it. Same shape as F10,
+where the missing state was `accepted`.
+
+Held as provisional until the other two runs of this case land — if they diverge
+on the state, it is a judgement call rather than a gap.
