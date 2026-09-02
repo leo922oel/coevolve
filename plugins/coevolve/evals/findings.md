@@ -62,3 +62,47 @@ shopping wearing a tidy-up's clothes. Keep it, and document it as deliberate.
 
 The eval paid for itself here: the criteria said "refuse a verdict on thin
 evidence", which was right, and missed that refusing forever is its own failure.
+
+---
+
+## F4 — this harness cannot measure triggering at all (eval defect, both iterations void)
+
+Iteration 1 reported 2/9 skill invocations, iteration 2 reported 0/9. Both
+numbers are artifacts and neither should be quoted.
+
+The decisive evidence is the order of tool calls in the one run that did invoke
+a skill. `enact-r1` called `Skill :: coevolve:enact` as its **sixth** tool call,
+immediately after its fifth: `cd <repo>/plugins/coevolve/skills && ls -R && cat
+enact/SKILL.md`. It did not trigger on the description. It found the skill on
+disk and then called it by name.
+
+Moving the workspace to /tmp for iteration 2 did not help. Every run still
+located the plugin — agents search the filesystem for "coevolve" and find both
+the repo and the installed cache. And because the plugin was uninstalled and
+reinstalled between iterations, whether the skills were even present in each
+subagent's available-skills list is not something this run can establish.
+
+So what these eighteen runs measured is **behaviour given the skill's guidance**,
+which is a real and useful question, and they answer it well. What they did not
+measure, at all, is whether the guidance would ever be reached.
+
+Measuring triggering needs an environment where the agent cannot read the
+plugin's source and the prompt does not name it — a fresh sandbox per run, which
+is exactly what `claude plugin eval` provides and this account cannot yet run.
+Until then, triggering is untested, and any description tuning would be tuning
+against a number that does not mean what it says.
+
+## F5 — the F1 fix reached behaviour (confirmed)
+
+Iteration 2's verify runs used the new signal without being told to.
+`verify2-r1` read `blocked_by: both` and gave the two sides opposite advice —
+the before window is closed and its backfill option expires within days, the
+after window fills on its own — and traced the root cause to the lesson having
+no `baseline:` field, which is precisely what the fix added.
+
+`verify2-r2` went further than the rubric asked: an exact permutation test
+showing that 2-versus-2 has a floor of p = 1/6 no matter which test is used, so
+more statistics cannot help and only more data can; and it explicitly refused
+the pseudo-replication that would treat 400 tool calls as independent samples
+and produce p ≈ 1e-4. Neither is in the skill text. The skill asked for honest
+refusal and left the reasoning to the model, which is the right division.
