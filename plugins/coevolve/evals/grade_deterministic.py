@@ -139,7 +139,10 @@ def main() -> int:
     # repo. When it sits inside, a run can reach the plugin source by walking up
     # and read SKILL.md through the shell instead of invoking the skill — which
     # silently turns a triggering measurement into something else.
-    root = Path(sys.argv[1]) if len(sys.argv) > 1 else HERE / "workspace" / "iteration-1"
+    # Default outside the plugin. Run artifacts kept under it get copied into
+    # the installed package by a directory-source install, gitignore or not.
+    default = HERE.parent.parent.parent / "eval-runs" / "iteration-1"
+    root = Path(sys.argv[1]) if len(sys.argv) > 1 else default
     if not root.exists():
         print(f"grade_deterministic: no such workspace: {root}", file=sys.stderr)
         return 2

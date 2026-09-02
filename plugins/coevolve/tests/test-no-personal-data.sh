@@ -56,4 +56,27 @@ hits="$(cd "$REPO" && grep -rnE '>\s*"?\$HOME/\.claude/(?!coevolve)' plugins/coe
 [ -z "$hits" ] || fail "a script writes outside \$COEVOLVE_HOME:
 $hits"
 echo "PASS all writes are confined to the coevolve home"
+
+# ── the artifact that actually travels ────────────────────────────────────────
+# git cleanliness is not the same as package cleanliness. A directory-source
+# `plugin install` copies the filesystem, so a gitignored file sitting under the
+# plugin ships anyway. Checked here because that is where it was found: an eval
+# workspace of 184 files and absolute home paths had been riding along.
+pkg="$(ls -d "$HOME"/.claude/plugins/cache/*/*/*/ 2>/dev/null | grep -m1 '/coevolve/' || true)"
+if [ -z "$pkg" ] || ! git -C "$REPO" rev-parse --git-dir >/dev/null 2>&1; then
+  echo "SKIP no installed package to check against" >&2
+else
+  extra=""
+  while IFS= read -r f; do
+    rel="${f#"$pkg"}"
+    git -C "$REPO" ls-files --error-unmatch "plugins/coevolve/$rel" >/dev/null 2>&1 \
+      || extra="${extra}  $rel
+"
+  done < <(find "$pkg" -type f)
+  if [ -n "$extra" ]; then
+    fail "the installed package carries $(printf '%s' "$extra" | grep -c .) file(s) git does not track:
+$extra"
+  fi
+  echo "PASS the installed package contains only tracked files"
+fi
 echo "PASS"

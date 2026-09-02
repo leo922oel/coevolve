@@ -25,5 +25,8 @@ __pycache__/
 tmp/
 .omc/
 
-# Eval run outputs: bulky, regenerable, and the conclusions live in evals/findings.md
-plugins/coevolve/evals/workspace/
+# Eval run outputs: bulky, regenerable, and the conclusions live in evals/findings.md.
+# They live OUTSIDE plugins/ on purpose. A directory-source `plugin install`
+# copies the filesystem rather than the git tree, so anything sitting under the
+# plugin ships whether or not git ignores it.
+/eval-runs/
