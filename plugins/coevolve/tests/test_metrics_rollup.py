@@ -209,6 +209,32 @@ class CompareTest(unittest.TestCase):
                              store=self.store).stdout)
         self.assertEqual(out["verdict"], "measured")
 
+    def test_d7_identical_sessions_are_not_independent_observations(self):
+        """A count is not independence. Six sessions with the same value are one
+        observation wearing six hats, and --min-n cannot tell the difference."""
+        self.seed(6, 6, before_err=10, after_err=2)   # generator makes each side uniform
+        out = self.compare(min_n=5)
+        self.assertEqual(out["before"]["distinct_values"], 1)
+        self.assertEqual(out["after"]["distinct_values"], 1)
+        self.assertTrue(out["degenerate_spread"])
+        self.assertIn("identical", out["caveat"].lower())
+
+    def test_d7_real_spread_is_not_flagged(self):
+        recs = []
+        for i in range(6):
+            recs.append(fingerprint(f"b{i}", f"tb{i}", "session", "2026-08-0%d" % (i + 1),
+                                    tool_calls=100, errors=8 + i))
+        for i in range(6):
+            recs.append(fingerprint(f"a{i}", f"ta{i}", "session", "2026-08-2%d" % i,
+                                    tool_calls=100, errors=1 + i % 3))
+        with (self.store / "2026-08.jsonl").open("w", encoding="utf-8") as fh:
+            for r in recs:
+                fh.write(json.dumps(r) + "\n")
+        out = self.compare(min_n=5)
+        self.assertGreater(out["before"]["distinct_values"], 1)
+        self.assertFalse(out["degenerate_spread"])
+        self.assertNotIn("caveat", out)
+
     def test_d3_metric_is_echoed_so_the_choice_is_auditable(self):
         self.seed(6, 6, before_err=10, after_err=10)
         out = self.compare()

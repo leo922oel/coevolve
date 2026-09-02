@@ -65,8 +65,17 @@ for opposite advice:**
 - **Insufficient evidence** → say exactly how many sessions are on each side and
   roughly when there will be enough. Leave the state as `enacted`.
 
+**Check `degenerate_spread` before believing a verdict.** When every session in
+a window carries an identical value, the effective sample there is one no matter
+what `n` says, and the minimum-n threshold cannot see it. The tool reports
+`distinct_values` per window for this reason. Identical sessions usually mean
+the same task repeated, or the same day sampled twice — not independent evidence.
+
 Before concluding, ask one question of the data: **could something else explain
-this?** A month with different work in it moves every metric. Where a
+this?** Compare the two windows on things the change could not have touched —
+project, session length, tool mix, task type. If those moved together with the
+metric, the work changed and the metric followed; say so rather than reporting a
+result the first question would demolish. A month with different work in it moves every metric. Where a
 confounder is plausible, name it and lower the confidence rather than claiming a
 clean result — a verification stage that always confirms is just a slower way of
 guessing.

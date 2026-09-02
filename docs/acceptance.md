@@ -59,6 +59,7 @@ reaches an enforcement layer does not change behaviour, so state is tracked.
 | C4 | State transitions are append-only and dated; a lesson's history is reconstructable. |
 | C5 | On enactment, a lesson records a **baseline snapshot** of its registered metric, taken while the data still exists — and enactment warns when that baseline is already too thin to ever support a verdict. |
 | C6 | A lesson's `enacted:` date is the day enforcement actually became **live**. Where activation needs a user action, the lesson stays `logged` and the stamp is performed by the installer that does the activation, so the two cannot diverge. |
+| C9 | The nudge stays credible in both directions: lower-severity lessons surface on a longer fuse rather than being filtered out, verification is not asked for until it is plausibly answerable, and a malformed state (`enacted` with no date) is loud rather than skipped. |
 | C8 | A lesson that genuinely cannot be enforced goes to **`accepted`**, never `enacted`. Acceptance requires a reason and a `review_on:` date, and the nudge returns on that date. Acceptance without a date is treated as unhandled, so it cannot be used to silence a lesson. |
 | C7 | ENACT writes only under `lessons/` and `enforcement/`. The playbook belongs to DISTILL and the calibration log to CALIBRATE; a stage that edits its neighbours' artifacts makes every later diff ambiguous. |
 
@@ -81,6 +82,7 @@ reaches an enforcement layer does not change behaviour, so state is tracked.
 | D4 | Distinguishes a thin **after** window from a thin **before** window, and says which is blocking. They are not the same problem: the after side fills as you work, the before side is closed forever. |
 | D5 | Accepts a **baseline snapshot stored at enactment time** and compares against it instead of re-deriving the before window, so a lesson stays verifiable after its transcripts age out. |
 | D6 | With an adequate stored baseline, produces a verdict even when the store holds no before-side sessions at all. |
+| D7 | Reports how many **distinct values** each window holds, and flags a window whose sessions all carry the same value. A count is not independence: six identical sessions clear a minimum-n threshold while being one observation. |
 
 > **Why D4-D6 exist** — found by the first eval run, not by design. VERIFY
 > correctly refused a verdict on two sessions per side, then pointed out that the

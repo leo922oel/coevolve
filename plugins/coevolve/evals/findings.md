@@ -215,3 +215,33 @@ the fix later used, is about as clear as this kind of evidence gets. The design
 was not invented to patch a failure; it was the answer the material already
 implied, and the eval surfaced it by making three attempts visible side by
 side.
+
+
+## F11-F13 — three independent runs each found a different hole in the nudge
+
+None was looking for it. All three are the same disease: the session-start nudge
+is the only enforcement layer in this design, so anything that makes it noisy or
+silent removes the system's reason to exist.
+
+**F11 — a count is not independence.** `--min-n` guards against thin evidence by
+counting sessions. The confound fixture's six sessions per side carry identical
+values, so the effective sample is one per side while the threshold passes
+cleanly. One run put it exactly: "n=6 是假的 6，實際上只有兩個獨立觀測值".
+`compare` now reports `distinct_values` per window and flags
+`degenerate_spread`. This began as a fixture defect (F9) and turned out to be a
+product one — the fixture was extreme, but real stores hold near-duplicate
+sessions all the time.
+
+**F12 — the enact nudge filtered on `severity: high`.** A medium lesson with
+three occurrences that cost two days sat invisible for 21 days. Lower severity
+now gets a longer fuse and a quieter line, not silence.
+
+**F13 — the verify nudge had no date gate.** Any `enacted` lesson nagged every
+session from the day it landed, and verification legitimately takes weeks. This
+is the same failure just fixed for `accepted`, sitting in the adjacent branch —
+which is worth noticing: fixing one instance of a pattern is not fixing the
+pattern.
+
+A fourth, found while fixing the third: an `enacted` lesson with no `enacted:`
+date was skipped silently. It is now counted as due, because a malformed state
+is exactly what this stage exists to surface.

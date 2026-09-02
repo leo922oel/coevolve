@@ -24,24 +24,36 @@ monthly="$(cfg monthly_due_days)";        monthly="${monthly:-28}"
 nudge="$(cfg inbox_nudge_count)";         nudge="${nudge:-10}"
 cal_due="$(cfg calibrate_due_days)";      cal_due="${cal_due:-14}"
 enact_due="$(cfg enact_due_days)";        enact_due="${enact_due:-3}"
+# A medium lesson gets a longer fuse, not silence. The old filter surfaced only
+# high severity, so a medium lesson costing two days sat unseen for three weeks.
+enact_due_med="$(cfg enact_due_days_medium)"; enact_due_med="${enact_due_med:-21}"
+# Verification takes weeks by nature. Asking for it from the day of enactment is
+# the same cry-wolf failure that silence causes, arriving from the other side.
+verify_due="$(cfg verify_due_days)";     verify_due="${verify_due:-14}"
 playbook="${HOME_DIR}/playbook.md"
 
 out=""
 
 # ── ⑤ ENACT first: a high-severity lesson still only written down ──────────────
 if [[ -d "${HOME_DIR}/lessons" ]]; then
-  stuck=""; expired=""
+  stuck=""; expired=""; soft=""
   while IFS= read -r f; do
-    grep -qE '^severity:[[:space:]]*high' "$f" || continue
+    sev="$(grep -m1 -E '^severity:' "$f" | sed -E 's/^severity:[ \t]*//')"
     state="$(grep -m1 -E '^state:' "$f" | sed -E 's/^state:[ \t]*//')"
     name="$(basename "${f%.md}")"
     case "$state" in
       logged)
         logged="$(grep -m1 -E '^logged:' "$f" | sed -E 's/^logged:[ \t]*//')"
         age="$(days_since "$logged")"
-        [[ -n "$age" && "$age" -ge "$enact_due" ]] && stuck+="${name} (${age}d) "
+        [[ -n "$age" ]] || continue
+        if [[ "$sev" == high ]]; then
+          (( age >= enact_due )) && stuck+="${name} (${age}d) "
+        else
+          (( age >= enact_due_med )) && soft+="${name} (${sev}, ${age}d) "
+        fi
         ;;
       accepted)
+        [[ "$sev" == high ]] || continue
         # Acceptance is a decision to carry a risk, not a way to make the alarm
         # stop. It must name a date to look again, and it comes back then —
         # otherwise `accepted` quietly becomes where lessons go to be forgotten.
@@ -57,6 +69,7 @@ if [[ -d "${HOME_DIR}/lessons" ]]; then
   done < <(find "${HOME_DIR}/lessons" -maxdepth 1 -name '*.md' 2>/dev/null | sort)
   [[ -n "$stuck" ]] && out+="🚨 coevolve: high-severity lesson still only written down → 跑 coevolve:enact — ${stuck}"$'\n'
   [[ -n "$expired" ]] && out+="🚨 coevolve: 知情承擔的高嚴重度教訓該複審了 → 跑 coevolve:enact — ${expired}"$'\n'
+  [[ -n "$soft" ]] && out+="📌 coevolve: 較低嚴重度但久未處理的教訓 → 跑 coevolve:enact — ${soft}"$'\n'
 fi
 
 # ── pending predictions: cheap, and they expire in usefulness ──────────────────
@@ -107,8 +120,21 @@ fi
 
 # ── ⑥ VERIFY: enacted lessons whose effect has never been measured ────────────
 if [[ -d "${HOME_DIR}/lessons" ]]; then
-  unver="$(grep -lE '^state:[[:space:]]*enacted' "${HOME_DIR}"/lessons/*.md 2>/dev/null | wc -l | tr -d ' ')"
-  (( unver > 0 )) && out+="🔬 coevolve: ${unver} 條已落實但未驗效 → 跑 coevolve:verify。"$'\n'
+  unver=0
+  while IFS= read -r f; do
+    grep -qE '^state:[[:space:]]*enacted' "$f" || continue
+    enacted="$(grep -m1 -E '^enacted:' "$f" | sed -E 's/^enacted:[ \t]*//')"
+    age="$(days_since "$enacted")"
+    # A lesson marked enacted with no usable date is malformed, and the split
+    # date VERIFY needs is missing. Skipping it silently would hide exactly the
+    # kind of broken state this stage exists to catch, so it counts as due.
+    if [[ -z "$enacted" || -z "$age" ]]; then
+      unver=$((unver+1))
+    elif (( age >= verify_due )); then
+      unver=$((unver+1))
+    fi
+  done < <(find "${HOME_DIR}/lessons" -maxdepth 1 -name '*.md' 2>/dev/null | sort)
+  (( unver > 0 )) && out+="🔬 coevolve: ${unver} 條已落實滿 ${verify_due} 天仍未驗效 → 跑 coevolve:verify。"$'\n'
 fi
 
 [[ -n "$out" ]] && printf '%s' "$out"

@@ -83,6 +83,54 @@ printf '%s' "$out" | grep -q '🚨' && fail "enacted lesson must stop nagging"
 printf '%s' "$out" | grep -q 'coevolve:verify' || fail "enacted lesson should now ask to be verified"
 echo "PASS due-check: lesson state machine drives what gets recommended"
 
+# ── the nudge is the only enforcement this system has ─────────────────────────
+# Every flaw that makes it noisy or silent destroys it, so both directions are
+# tested: a lesson that never surfaces, and an alarm that never stops.
+export COEVOLVE_HOME="$(mktemp -d)"; mkdir -p "$COEVOLVE_HOME/lessons"
+cat > "$COEVOLVE_HOME/config.md" <<'CFG'
+enact_due_days: 3
+enact_due_days_medium: 21
+verify_due_days: 14
+weekly_due_days: 7
+monthly_due_days: 28
+inbox_nudge_count: 10
+calibrate_due_days: 14
+CFG
+lesson() { cat > "$COEVOLVE_HOME/lessons/$1.md" <<LES
+---
+id: $1
+severity: $2
+state: $3
+enforcement: $4
+logged: $5
+enacted: $6
+verified:
+---
+LES
+}
+
+# F12 — a medium lesson that nobody can see is a lesson nobody will act on
+lesson L-med medium logged none "$(date -d '30 days ago' +%Y-%m-%d)" ""
+out="$(bash "$CLAUDE_PLUGIN_ROOT/hooks/due-check.sh" 2>/dev/null)"
+printf '%s' "$out" | grep -q 'L-med' || fail "a medium lesson older than enact_due_days_medium must surface"
+printf '%s' "$out" | head -1 | grep -q '🚨' && fail "a medium lesson must not outrank a high one"
+echo "PASS due-check: medium lessons surface, without taking the top slot"
+
+lesson L-med medium logged none "$(date -d '5 days ago' +%Y-%m-%d)" ""
+[ -z "$(bash "$CLAUDE_PLUGIN_ROOT/hooks/due-check.sh" 2>/dev/null | grep 'L-med')" ]   || fail "a recent medium lesson should not nag yet"
+echo "PASS due-check: medium lessons get a longer fuse than high ones"
+rm -f "$COEVOLVE_HOME/lessons/L-med.md"
+
+# F13 — verification legitimately takes weeks; nagging from day one is crying wolf
+lesson L-fresh medium enacted hook "$(date -d '20 days ago' +%Y-%m-%d)" "$(date -d '2 days ago' +%Y-%m-%d)"
+[ -z "$(bash "$CLAUDE_PLUGIN_ROOT/hooks/due-check.sh" 2>/dev/null | grep 'coevolve:verify')" ]   || fail "a lesson enacted two days ago must not already be nagging to be verified"
+echo "PASS due-check: a fresh enactment is given time to accumulate evidence"
+
+lesson L-fresh medium enacted hook "$(date -d '40 days ago' +%Y-%m-%d)" "$(date -d '30 days ago' +%Y-%m-%d)"
+bash "$CLAUDE_PLUGIN_ROOT/hooks/due-check.sh" 2>/dev/null | grep -q 'coevolve:verify'   || fail "an enactment older than verify_due_days must ask to be verified"
+echo "PASS due-check: verification is asked for once it is actually due"
+rm -rf "$COEVOLVE_HOME"
+
 # ── a lesson nothing can enforce needs somewhere to go ────────────────────────
 # Leaving it `logged` makes the alarm cry wolf forever, which teaches the user to
 # ignore the one mechanism this system depends on. Marking it `enacted` is a lie

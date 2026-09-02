@@ -171,6 +171,10 @@ def _stats(values: list[float]) -> dict:
     idx = max(0, int(len(ordered) * 0.9) - 1)
     return {
         "n": len(ordered),
+        # A count is not independence. Six sessions carrying the same value are
+        # one observation wearing six hats, and a minimum-n threshold cannot see
+        # the difference — so the spread is reported alongside the count.
+        "distinct_values": len(set(ordered)),
         "mean": round(statistics.mean(ordered), 6),
         "median": round(statistics.median(ordered), 6),
         "p90": round(ordered[idx], 6),
@@ -268,8 +272,12 @@ def _load_baseline(path: Path, metric: str):
         # one is worse than having no baseline, because it looks like a result.
         raise ValueError(f"baseline is for {stored_metric!r}, not {metric!r}")
     mean = float(data["mean"])
+    n = int(data["n"])
     return {
-        "n": int(data["n"]),
+        "n": n,
+        "distinct_values": data.get(
+            "distinct_values",
+            1 if n > 1 and data.get("min", mean) == data.get("max", mean) else None),
         "mean": mean,
         "median": float(data.get("median", mean)),
         "p90": float(data.get("p90", mean)),
@@ -379,6 +387,17 @@ def cmd_compare(rows, args) -> int:
         change = (a - b) / scale
         result["verdict"] = "measured"
         result["relative_change"] = round(change, 6)
+        degenerate = [
+            side for side, st in (("before", before_stats), ("after", result["after"]))
+            if st.get("distinct_values") == 1 and st["n"] > 1
+        ]
+        result["degenerate_spread"] = bool(degenerate)
+        if degenerate:
+            result["caveat"] = (
+                f"every session in the {' and '.join(degenerate)} window carries an "
+                f"identical value, so the effective sample there is 1 regardless of n. "
+                f"The min-n threshold cannot detect this. Treat the direction as "
+                f"unconfirmed until the sessions actually differ from each other.")
         result["direction"] = "flat" if abs(change) < 0.05 else ("down" if change < 0 else "up")
     json.dump(result, sys.stdout, ensure_ascii=False, indent=2)
     sys.stdout.write("\n")

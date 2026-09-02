@@ -28,6 +28,13 @@ calibrate_min_age_days: 5
 # How long a high-severity lesson may sit in `logged` before the loop starts
 # insisting. Short on purpose: this is the gap the system exists to close.
 enact_due_days: 3
+# Lower-severity lessons get a longer fuse, not silence. Filtering them out
+# entirely means a lesson that costs you two days can sit unseen for weeks.
+enact_due_days_medium: 21
+# How long an enactment is left alone before the loop asks for verification.
+# Verification takes weeks by nature; asking from day one is the same cry-wolf
+# failure as never asking, arriving from the other direction.
+verify_due_days: 14
 distill_lookback_weeks: 4
 # Sessions required on each side of a change before VERIFY will name a direction.
 verify_min_sessions: 5
