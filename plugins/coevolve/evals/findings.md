@@ -302,7 +302,7 @@ truth, and it was one flag away the whole time.
 An unknown field errors rather than returning an empty window: comparing nothing
 and comparing something that yielded nothing look identical in the output.
 
-## F16 — compare blocks on count, never on composition (deferred)
+## F16 *(fixed)* — compare blocks on count, never on composition
 
 `blocked_by` has three values and all three are about how many sessions a window
 holds. The confound case has six on each side, clears `min-n`, returns
@@ -331,7 +331,7 @@ automatic drift detection mid-flight would answer that question for it and make
 the three runs incomparable — the same discipline that deferred the F9 fixture
 fix.
 
-## F17 — the recovery path exists and nothing tells the skill to use it (deferred)
+## F17 *(fixed)* — the recovery path exists and nothing tells the skill to use it
 
 Raised by a run noticing that the fixture's inbox pointed at transcripts which
 were not there. That part was a fixture artifact, but checking the real store
@@ -358,7 +358,7 @@ there.
 Fix: say so in `curate`, and have it join on `transcript_id` when the file is
 gone. Deferred until iteration 5 finishes, for the same reason as F16.
 
-## F18 — acceptance comes back with nothing to look at (deferred)
+## F18 *(fixed)* — acceptance comes back with nothing to look at
 
 `accepted` requires a reason and a `review_on:` date. It does not require an
 observable check, and without one the review has nothing to examine. As the run
@@ -387,3 +387,39 @@ demonstrate that *no* metric could carry the lesson, since 24 sessions came back
 with one distinct value on every field. A store with no variance cannot separate
 a careful review from a quick one. That the field was useful for a purpose it
 was not designed for is a good sign about the field.
+
+
+---
+
+## Iteration 5 outcome
+
+All three cases targeted surfaces added during this session, so this round asked
+whether the fixes introduced new problems. They did not, and two of them were
+used in ways nobody instructed.
+
+`status-picks-one` — 3/3 recommended exactly one action, the same one, on the
+same reasoning: the credential lesson is the only one whose text layer has
+already been tried and failed, and the only one that is irreversible. One run
+also ran verify on a second lesson and identified in two minutes that it can
+never be verified — no baseline was taken at enactment and its transcripts have
+expired. That is the F1 scenario recognised in the wild.
+
+`verify-uses-subpopulation` — 3/3 **executed** `--where`, four to five times
+each, across two or three populations. Confirmed from the transcripts, not from
+the answers. Two of them ran it in both directions and got opposite verdicts
+from the same data: `proj_integration` blocked on `after_window`, which fills by
+itself, and `proj_review_other` blocked on `before_window`, which never will.
+`blocked_by` came from F1 and `--where` from F15, added hours apart; no prompt
+mentioned either, and the runs composed them into a distinction neither makes
+alone.
+
+`enact-reviews-an-acceptance` — the case discriminated, and in the most useful
+direction. Two runs re-accepted with an observable check added. One **overturned
+the acceptance**, catching that the original note had rejected the skill layer on
+a false premise: a skill triggers on the task, and reviewing is observable, so
+"would have to trigger on being tired" was never the right test. That overturn
+was only possible because the June note recorded its reasoning per layer, which
+is what sharpened F18 from "name a check" into "record the premise".
+
+Three runs, three outcomes, none of them wrong. On disk all three left the state
+alone and asked first, which is the behaviour the case was checking.

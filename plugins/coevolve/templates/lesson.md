@@ -5,7 +5,8 @@ severity: high | medium | low
 # enacted   — enforcement is LIVE (see `enacted:` below)
 # verified  — the change was measured and it moved
 # accepted  — looked, nothing can enforce this, the risk is carried knowingly.
-#             Requires a reason and `review_on:`. Never use `enacted` for this:
+#             Requires `review_on:`, an `observable_check:`, and the per-layer
+#             reasoning below. Never use `enacted` for this:
 #             it claims something fired when nothing did, and sends VERIFY
 #             looking for a change that never happened.
 # retired   — no longer live
@@ -23,6 +24,11 @@ retired:
 # carry a risk, not a way to stop the alarm — without a date the nudge treats
 # the lesson as unhandled.
 review_on:
+# accepted only: what would be looked at on the review date, where that evidence
+# lives, and who looks. Without it the review has nothing to examine and comes
+# out word-for-word identical to the last one — which is how a review date
+# becomes theatre.
+observable_check:
 # The metric VERIFY will compare, named NOW — before the outcome is known.
 # Choosing it afterwards is metric shopping, and it always finds a win.
 metric:
@@ -50,6 +56,14 @@ The mechanism. A lesson without a mechanism cannot be enforced, only remembered.
 (a workflow that makes the right thing the easy thing). Writing it in the
 playbook is not enforcement — the playbook is read when consulted, and the
 failures worth this file are the ones that happen when nobody is consulting.
+
+When the answer is `none`, write down **why each of the three was rejected, and
+on what premise**. A later review tests those premises; it cannot re-derive them.
+One acceptance here was overturned three months on because its note said the
+skill layer "would have to trigger on being tired, which is not observable" —
+a premise a reviewer could see was wrong, since a skill triggers on the task and
+reviewing is perfectly observable. Had the note only said "nothing fits", the
+error would have survived every future review.
 
 ## History
 

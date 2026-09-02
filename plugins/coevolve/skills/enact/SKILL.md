@@ -18,7 +18,12 @@ present at the moment this goes wrong"**.
 ## 1. Take the most expensive lesson first
 
 Read `$COEVOLVE_HOME/lessons/*.md` for `state: logged`, high severity first,
-oldest first. Handle one properly rather than four superficially — a
+oldest first — and for `state: accepted` whose `review_on:` has passed.
+
+**A review is not a date change.** Re-run step 2 against today's facts: the
+store has data it did not have then, and the premise behind each rejection may
+no longer hold. Re-accepting is a fine outcome; arriving at it without testing
+the premises is not. Handle one properly rather than four superficially — a
 half-enacted lesson is indistinguishable from an unenacted one.
 
 Show the user which lesson you are on and what it cost, in one or two lines.
@@ -55,6 +60,20 @@ learn to ignore the one mechanism this system has.
 `accepted` says what actually happened: you looked, nothing fits, and you are
 carrying the risk on purpose. The review date is what stops it becoming the
 place lessons go to be forgotten — the nudge comes back then.
+
+Two things have to go in the file for that return to be worth anything:
+
+- **`observable_check:`** — what would be looked at, where that evidence lives,
+  and who looks. Without it the review has nothing to examine and comes out
+  identical to the last one, and the date is theatre. Note that silence from a
+  system nobody is watching looks exactly like safety; say which it is.
+- **the premise behind each rejection** — not "nothing fits", but why a hook,
+  a rule and a skill each fail, specifically. A later review tests those
+  premises. One acceptance was overturned three months on because its note said
+  a skill "would have to trigger on being tired, which is not observable" —
+  visibly wrong, since a skill triggers on the task and reviewing is observable.
+  Had it only recorded the conclusion, the mistake would have outlived every
+  review of it.
 
 ## 3. Name the metric NOW, before anything is applied
 

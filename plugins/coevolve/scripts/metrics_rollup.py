@@ -355,6 +355,65 @@ def cmd_baseline(rows, args) -> int:
     return 0
 
 
+def _composition(before_rows, after_rows) -> tuple[dict, str | None]:
+    """Describe what each window was made of, not just how much of it there was.
+
+    `blocked_by` guards the count. Nothing guarded the contents, so a comparison
+    across two windows holding entirely different work returned a clean verdict —
+    true about the numbers, misleading about the change. Seven eval runs found
+    this by hand, every time from fields already sitting in the row.
+
+    The verdict is not blocked. The numbers are real, and sometimes a shift in
+    what you worked on is exactly what you meant to measure. But a `measured`
+    that arrives with "these windows share no project and the tool mix halved"
+    is a different sentence from one that does not.
+    """
+    def projects(rows):
+        return {r.get("project_key") for r in rows if r.get("project_key")}
+
+    def median_calls(rows):
+        vals = sorted(r.get("tool_calls", 0) for r in rows)
+        return statistics.median(vals) if vals else 0.0
+
+    def bash_share(rows):
+        total = sum(r.get("tool_calls", 0) for r in rows)
+        bash = sum((r.get("tools") or {}).get("Bash", 0) for r in rows)
+        return round(bash / total, 6) if total else 0.0
+
+    pb, pa = projects(before_rows), projects(after_rows)
+    mb, ma = median_calls(before_rows), median_calls(after_rows)
+    bb, ba = bash_share(before_rows), bash_share(after_rows)
+    comp = {
+        "projects_before": sorted(pb),
+        "projects_after": sorted(pa),
+        "shared_projects": len(pb & pa),
+        "median_tool_calls_before": mb,
+        "median_tool_calls_after": ma,
+        "size_ratio": round(ma / mb, 6) if mb else 0.0,
+        "bash_share_before": bb,
+        "bash_share_after": ba,
+    }
+    reasons = []
+    if not before_rows or not after_rows:
+        # An empty window is a count problem, and `blocked_by` already says so.
+        # Reporting drift as well would double-report it, and "the Bash share
+        # moved from 0.70 to 0.00" describes nothing.
+        return comp, None
+    if pb and pa and not (pb & pa):
+        reasons.append("the two windows share no project")
+    if mb and (comp["size_ratio"] < 0.5 or comp["size_ratio"] > 2.0):
+        reasons.append(f"median session size moved by {comp['size_ratio']:.2f}x")
+    if abs(bb - ba) > 0.2:
+        reasons.append(f"the Bash share moved from {bb:.2f} to {ba:.2f}")
+    caveat = None
+    if reasons:
+        caveat = ("; ".join(reasons) + ". The work changed across the split, so a "
+                  "metric that moved with it cannot be read as an effect of the "
+                  "change alone. Re-run with --where to compare inside one "
+                  "population before drawing a conclusion.")
+    return comp, caveat
+
+
 def cmd_compare(rows, args) -> int:
     try:
         rows, applied = apply_filters(rows, args.where)
@@ -399,6 +458,11 @@ def cmd_compare(rows, args) -> int:
     }
     if applied:
         result["where"] = applied
+    comp, comp_caveat = _composition(before_rows, after_rows)
+    result["composition"] = comp
+    result["composition_drift"] = comp_caveat is not None
+    if comp_caveat:
+        result["composition_caveat"] = comp_caveat
     before_thin = before_stats["n"] < args.min_n
     after_thin = len(after) < args.min_n
     if before_thin or after_thin:

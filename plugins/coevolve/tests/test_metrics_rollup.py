@@ -294,6 +294,69 @@ class CompareTest(unittest.TestCase):
         self.assertEqual(out["verdict"], "insufficient evidence")
         self.assertEqual(out["blocked_by"], "both")
 
+    def _two_populations(self):
+        """The confound shape: different work either side of the split."""
+        recs = []
+        for i in range(6):
+            r = fingerprint(f"b{i}", f"tb{i}", "session", "2026-08-0%d" % (i + 1),
+                            tool_calls=300, errors=30, project="proj_integration")
+            r["tools"] = {"Bash": 210, "Read": 90}
+            recs.append(r)
+        for i in range(6):
+            r = fingerprint(f"a{i}", f"ta{i}", "session", "2026-08-2%d" % i,
+                            tool_calls=90, errors=2, project="proj_review")
+            r["tools"] = {"Read": 60, "Bash": 30}
+            recs.append(r)
+        with (self.store / "2026-08.jsonl").open("w", encoding="utf-8") as fh:
+            for r in recs:
+                fh.write(json.dumps(r) + "\n")
+
+    def test_d9_composition_drift_is_reported_alongside_a_clean_verdict(self):
+        """Seven runs found this by hand, from fields already in the row. A
+        verdict of `measured` on two windows holding different work is true and
+        misleading, and the tool was silent about the second half."""
+        self._two_populations()
+        out = self.compare(min_n=5)
+        self.assertEqual(out["verdict"], "measured")
+        self.assertTrue(out["composition_drift"])
+        self.assertEqual(out["composition"]["shared_projects"], 0)
+        self.assertIn("project", out["composition_caveat"].lower())
+
+    def test_d9_the_size_and_tool_mix_shift_are_quantified(self):
+        self._two_populations()
+        c = self.compare(min_n=5)["composition"]
+        self.assertAlmostEqual(c["size_ratio"], 90 / 300, places=3)
+        self.assertAlmostEqual(c["bash_share_before"], 0.70, places=2)
+        self.assertAlmostEqual(c["bash_share_after"], 1 / 3, places=2)
+
+    def test_d9_comparable_windows_are_not_flagged(self):
+        recs = []
+        for i in range(6):
+            r = fingerprint(f"b{i}", f"tb{i}", "session", "2026-08-0%d" % (i + 1),
+                            tool_calls=100, errors=8 + i, project="proj_same")
+            r["tools"] = {"Bash": 70, "Read": 30}
+            recs.append(r)
+        for i in range(6):
+            r = fingerprint(f"a{i}", f"ta{i}", "session", "2026-08-2%d" % i,
+                            tool_calls=110, errors=2 + i % 3, project="proj_same")
+            r["tools"] = {"Bash": 75, "Read": 35}
+            recs.append(r)
+        with (self.store / "2026-08.jsonl").open("w", encoding="utf-8") as fh:
+            for r in recs:
+                fh.write(json.dumps(r) + "\n")
+        out = self.compare(min_n=5)
+        self.assertFalse(out["composition_drift"])
+        self.assertNotIn("composition_caveat", out)
+
+    def test_d9_filtering_to_one_population_removes_the_drift(self):
+        """The flag should point at the fix that already exists."""
+        self._two_populations()
+        out = json.loads(run("compare", "--metric", "derived.error_rate",
+                             "--split", "2026-08-15", "--min-n", "3",
+                             "--where", "project_key=proj_integration",
+                             store=self.store).stdout)
+        self.assertFalse(out.get("composition_drift", False))
+
     def test_d3_metric_is_echoed_so_the_choice_is_auditable(self):
         self.seed(6, 6, before_err=10, after_err=10)
         out = self.compare()

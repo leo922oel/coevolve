@@ -29,6 +29,20 @@ tool count do not tell you what the work was — but let the fingerprint carry t
 numbers. Counting tool calls by hand is exactly the kind of thing that comes out
 wrong.
 
+**A flag can outlive the transcript it points at.** Transcripts are kept for
+about 30 days; a flag from five weeks ago points at a file that is gone. That is
+not a lost episode — the Stop hook took a fingerprint at the same moment it
+wrote the flag, and fingerprints do not expire. Join on the path's stem, which
+is the `transcript_id`:
+
+```bash
+grep -h "\"transcript_id\": \"<stem>\"" "$HOME_DIR"/metrics/*.jsonl
+```
+
+You lose the narrative and keep every measurement. Write the episode from what
+survives and say in it that the transcript had expired, rather than dropping the
+work or reconstructing it from the title alone.
+
 ## 2. Cluster into episodes, not sessions
 
 A session is a file; an episode is a piece of work. They are not the same, and
