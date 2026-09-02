@@ -84,6 +84,25 @@ class RollupTest(unittest.TestCase):
         self.assertEqual(rows["s2"]["tool_calls"], 40, "latest record per transcript must win")
         self.assertEqual(rows["s2"]["user_turns"], 9)
 
+    def test_f23_sidechain_calls_inside_a_main_transcript_count_as_delegated(self):
+        """Two fields that should agree could disagree with nothing noticing.
+        The fingerprint saw delegation inside the transcript; the roll-up read
+        only separate subagent rows and reported none."""
+        fp = fingerprint("s3", "t3", "session", "2026-08-05", tool_calls=100)
+        fp["derived"]["delegated_tool_call_share"] = 0.25
+        self.write([fp], name="2026-09.jsonl")
+        row = {r["session_id"]: r for r in self.sessions()}["s3"]
+        self.assertEqual(row["tool_calls"], 100)
+        self.assertEqual(row["delegated_tool_calls"], 25)
+        self.assertEqual(row["own_tool_calls"], 75, "the total must not double-count")
+        self.assertAlmostEqual(row["derived"]["delegated_share"], 0.25, places=6)
+
+    def test_f23_a_store_without_inner_sidechains_is_unchanged(self):
+        """Regression guard for the real store, where this never occurs."""
+        rows = {r["session_id"]: r for r in self.sessions()}
+        self.assertEqual(rows["s1"]["delegated_tool_calls"], 30)
+        self.assertEqual(rows["s1"]["own_tool_calls"], 20)
+
     def test_orphan_subagent_still_reported(self):
         # A subagent whose parent transcript was never captured must not vanish.
         self.write([fingerprint("s9", "agent-z", "subagent", "2026-08-03", tool_calls=7)])
@@ -223,10 +242,10 @@ class CompareTest(unittest.TestCase):
         recs = []
         for i in range(6):
             recs.append(fingerprint(f"b{i}", f"tb{i}", "session", "2026-08-0%d" % (i + 1),
-                                    tool_calls=100, errors=8 + i))
+                                    tool_calls=95 + i * 6, errors=8 + i, turns=4 + i))
         for i in range(6):
             recs.append(fingerprint(f"a{i}", f"ta{i}", "session", "2026-08-2%d" % i,
-                                    tool_calls=100, errors=1 + i % 3))
+                                    tool_calls=88 + i * 9, errors=1 + i % 3, turns=2 + i))
         with (self.store / "2026-08.jsonl").open("w", encoding="utf-8") as fh:
             for r in recs:
                 fh.write(json.dumps(r) + "\n")
@@ -329,6 +348,40 @@ class CompareTest(unittest.TestCase):
         self.assertAlmostEqual(c["bash_share_before"], 0.70, places=2)
         self.assertAlmostEqual(c["bash_share_after"], 1 / 3, places=2)
 
+    def test_f20_identical_rows_are_flagged_even_when_the_metric_varies(self):
+        """Independence is a property of the row. Six sessions with the same
+        tool_calls, turns and duration are one observation however much the
+        compared metric happens to move."""
+        recs = []
+        for i in range(6):
+            recs.append(fingerprint(f"b{i}", f"tb{i}", "session", "2026-08-0%d" % (i + 1),
+                                    tool_calls=300, errors=27 + i, turns=38))
+        for i in range(6):
+            recs.append(fingerprint(f"a{i}", f"ta{i}", "session", "2026-08-2%d" % i,
+                                    tool_calls=120, errors=3 + i % 3, turns=14))
+        with (self.store / "2026-08.jsonl").open("w", encoding="utf-8") as fh:
+            for r in recs:
+                fh.write(json.dumps(r) + "\n")
+        out = self.compare(min_n=5)
+        self.assertGreater(out["before"]["distinct_values"], 1, "the metric does vary")
+        self.assertEqual(out["before"]["distinct_sessions"], 1)
+        self.assertTrue(out["degenerate_spread"])
+
+    def test_f20_genuinely_varied_rows_are_not_flagged(self):
+        recs = []
+        for i in range(6):
+            recs.append(fingerprint(f"b{i}", f"tb{i}", "session", "2026-08-0%d" % (i + 1),
+                                    tool_calls=280 + i * 20, errors=27 + i, turns=30 + i))
+        for i in range(6):
+            recs.append(fingerprint(f"a{i}", f"ta{i}", "session", "2026-08-2%d" % i,
+                                    tool_calls=100 + i * 15, errors=3 + i % 3, turns=10 + i))
+        with (self.store / "2026-08.jsonl").open("w", encoding="utf-8") as fh:
+            for r in recs:
+                fh.write(json.dumps(r) + "\n")
+        out = self.compare(min_n=5)
+        self.assertEqual(out["before"]["distinct_sessions"], 6)
+        self.assertFalse(out["degenerate_spread"])
+
     def test_d9_comparable_windows_are_not_flagged(self):
         recs = []
         for i in range(6):
@@ -408,6 +461,39 @@ class BaselineCaptureTest(unittest.TestCase):
                              "--baseline-file", str(snap), store=self.store).stdout)
         self.assertEqual(out["verdict"], "measured")
         self.assertEqual(out["direction"], "down")
+
+    def test_f19_a_degenerate_baseline_is_not_reported_as_usable(self):
+        """ENACT reads this at the one moment something can still be done about
+        it. `too_thin: false` on twenty-four identical sessions is the wrong
+        answer given at the only time it matters."""
+        store = Path(self.tmp.name) / "degen"
+        store.mkdir()
+        recs = [fingerprint(f"s{i}", f"t{i}", "session", "2026-08-%02d" % (i + 1),
+                            tool_calls=100, errors=10) for i in range(24)]
+        with (store / "2026-08.jsonl").open("w", encoding="utf-8") as fh:
+            for r in recs:
+                fh.write(json.dumps(r) + "\n")
+        out = json.loads(run("baseline", "--metric", "derived.error_rate",
+                             "--until", "2026-09-02", store=store).stdout)
+        self.assertEqual(out["n"], 24)
+        self.assertEqual(out["distinct_values"], 1)
+        self.assertFalse(out["too_thin"], "n really is above the floor")
+        self.assertTrue(out["degenerate"])
+        self.assertFalse(out["usable"], "enough sessions, one observation")
+
+    def test_f19_a_varied_baseline_is_usable(self):
+        store = Path(self.tmp.name) / "varied"
+        store.mkdir()
+        recs = [fingerprint(f"s{i}", f"t{i}", "session", "2026-08-%02d" % (i + 1),
+                            tool_calls=90 + i * 7, errors=5 + i, turns=3 + i % 5)
+                for i in range(12)]
+        with (store / "2026-08.jsonl").open("w", encoding="utf-8") as fh:
+            for r in recs:
+                fh.write(json.dumps(r) + "\n")
+        out = json.loads(run("baseline", "--metric", "derived.error_rate",
+                             "--until", "2026-09-02", store=store).stdout)
+        self.assertFalse(out["degenerate"])
+        self.assertTrue(out["usable"])
 
     def test_a_thin_baseline_says_so_at_capture_time(self):
         out = json.loads(run("baseline", "--metric", "derived.error_rate",

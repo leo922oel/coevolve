@@ -92,7 +92,17 @@ def roll_up(fingerprints: list[dict]) -> list[dict]:
         if kind == "subagent":
             row["delegated_tool_calls"] += calls
         else:
-            row["own_tool_calls"] += calls
+            # A main transcript can carry sidechain calls of its own. Reading
+            # only separate subagent rows discarded the fingerprint's own
+            # measurement, so two fields that should agree could disagree with
+            # nothing to notice. Zero on every real transcript today, because
+            # subagent work goes to its own file — which is exactly the sort of
+            # assumption that changes without announcement.
+            inner = int(round(float((fp.get("derived") or {})
+                                    .get("delegated_tool_call_share") or 0.0) * calls))
+            inner = max(0, min(inner, calls))
+            row["delegated_tool_calls"] += inner
+            row["own_tool_calls"] += calls - inner
         row["user_turns"] += int(counts.get("user_turns") or 0)
         row["tool_errors"] += int(counts.get("tool_errors") or 0)
         row["interrupts"] += int(counts.get("interrupts") or 0)
@@ -164,9 +174,26 @@ def _dig(row: dict, path: str):
     return node if isinstance(node, (int, float)) else None
 
 
-def _stats(values: list[float]) -> dict:
+def _session_signature(row: dict) -> tuple:
+    """What makes two sessions the same observation wearing two hats.
+
+    Shape, not content: how much work, how much steering, on which project. Two
+    runs agreeing on all three are one observation however much the compared
+    metric differs between them.
+
+    The date is deliberately excluded. Different days is weak evidence of
+    independence — a scripted daily run has different dates and an identical
+    shape — and including it makes the check fire on almost nothing.
+    """
+    return (row.get("tool_calls", 0),
+            row.get("user_turns", 0),
+            row.get("project_key", ""))
+
+
+def _stats(values: list[float], rows: list[dict] | None = None) -> dict:
     if not values:
-        return {"n": 0, "mean": 0.0, "median": 0.0, "p90": 0.0, "min": 0.0, "max": 0.0}
+        return {"n": 0, "distinct_values": 0, "distinct_sessions": 0,
+                "mean": 0.0, "median": 0.0, "p90": 0.0, "min": 0.0, "max": 0.0}
     ordered = sorted(values)
     idx = max(0, int(len(ordered) * 0.9) - 1)
     return {
@@ -175,6 +202,9 @@ def _stats(values: list[float]) -> dict:
         # one observation wearing six hats, and a minimum-n threshold cannot see
         # the difference — so the spread is reported alongside the count.
         "distinct_values": len(set(ordered)),
+        # And the metric is only one column. Rows identical in shape are not
+        # independent either, however much the compared column moves.
+        "distinct_sessions": len({_session_signature(r) for r in rows}) if rows else len(set(ordered)),
         "mean": round(statistics.mean(ordered), 6),
         "median": round(statistics.median(ordered), 6),
         "p90": round(ordered[idx], 6),
@@ -340,14 +370,22 @@ def cmd_baseline(rows, args) -> int:
             print(f"metrics_rollup: unknown metric path: {args.metric}", file=sys.stderr)
             return 2
         values.append(val)
-    stats = _stats(values)
+    stats = _stats(values, subset)
+    thin = stats["n"] < args.min_n
+    degenerate = stats["n"] > 1 and (stats["distinct_values"] == 1
+                                     or stats["distinct_sessions"] == 1)
     stats.update({
         "metric": args.metric,
         "captured_until": args.until,
         "captured": date.today().isoformat(),
-        # Said plainly at capture time: a baseline this thin will never support a
-        # verdict, and enactment is the only moment when anything can be done.
-        "too_thin": stats["n"] < args.min_n,
+        # Said plainly at capture time, because enactment is the only moment
+        # anything can still be done about it. Two ways to be useless and they
+        # are not the same: too few sessions, or enough sessions that are all
+        # the same observation. `usable` is the one ENACT should read — reading
+        # `too_thin` alone reports twenty-four identical sessions as fine.
+        "too_thin": thin,
+        "degenerate": degenerate,
+        "usable": not thin and not degenerate,
         "min_n": args.min_n,
     })
     json.dump(stats, sys.stdout, ensure_ascii=False, indent=2)
@@ -438,7 +476,7 @@ def cmd_compare(rows, args) -> int:
         print(f"metrics_rollup: unknown metric path: {exc.args[0]}", file=sys.stderr)
         return 2
 
-    before_stats = _stats(before)
+    before_stats = _stats(before, before_rows)
     baseline_source = "store"
     if args.baseline_file:
         try:
@@ -454,7 +492,7 @@ def cmd_compare(rows, args) -> int:
         "min_n": args.min_n,
         "baseline_source": baseline_source,
         "before": before_stats,
-        "after": _stats(after),
+        "after": _stats(after, after_rows),
     }
     if applied:
         result["where"] = applied
@@ -496,13 +534,15 @@ def cmd_compare(rows, args) -> int:
         result["relative_change"] = round(change, 6)
         degenerate = [
             side for side, st in (("before", before_stats), ("after", result["after"]))
-            if st.get("distinct_values") == 1 and st["n"] > 1
+            if st["n"] > 1 and (st.get("distinct_values") == 1
+                                or st.get("distinct_sessions") == 1)
         ]
         result["degenerate_spread"] = bool(degenerate)
         if degenerate:
             result["caveat"] = (
-                f"every session in the {' and '.join(degenerate)} window carries an "
-                f"identical value, so the effective sample there is 1 regardless of n. "
+                f"the {' and '.join(degenerate)} window collapses to one observation — "
+                f"either every session carries the same value, or the sessions are "
+                f"identical in shape — so its effective sample is 1 regardless of n. "
                 f"The min-n threshold cannot detect this. Treat the direction as "
                 f"unconfirmed until the sessions actually differ from each other.")
         result["direction"] = "flat" if abs(change) < 0.05 else ("down" if change < 0 else "up")

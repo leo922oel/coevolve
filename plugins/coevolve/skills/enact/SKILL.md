@@ -112,8 +112,11 @@ now and the comparison stays possible forever; skip it and the lesson can become
 permanently unverifiable, which is exactly how a loop quietly turns back into a
 diary.
 
-If the snapshot comes back `"too_thin": true`, say so **before** applying
-anything. The user then has a real choice while it is still available: run
+If the snapshot comes back `"usable": false`, say so **before** applying
+anything. Read `usable`, not `too_thin`: a baseline fails for two unrelated
+reasons — too few sessions, or enough sessions that are all the same
+observation — and `too_thin` only sees the first. Twenty-four identical runs
+report `too_thin: false` and cannot support a verdict. The user then has a real choice while it is still available: run
 `backfill_metrics.py` to sweep up transcripts still on disk, pick a metric with
 more history behind it, or accept a qualitative check instead. After enactment
 that choice is gone.
