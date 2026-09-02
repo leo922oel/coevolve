@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "coevolve",
+  "version": "0.1.0",
+  "description": "A closed feedback loop over your own Claude Code usage. Captures a deterministic fingerprint of every substantial session, curates it into episodes, calibrates your predictions against outcomes, distills habits / failure lessons / reusable patterns, enacts the high-severity lessons into rules and hooks, and verifies whether your measured behaviour actually changed.",
+  "author": {
+    "name": "Leo Chien"
+  },
+  "license": "MIT",
+  "keywords": ["self-improvement", "metrics", "playbook", "retrospective", "telemetry", "personalization"],
+  "skills": "./skills/",
+  "hooks": "./hooks/hooks.json"
+}

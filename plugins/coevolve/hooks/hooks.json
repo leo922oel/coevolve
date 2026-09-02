@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/due-check.sh\"",
+            "timeout": 10
+          }
+        ],
+        "description": "Nudge when a stage of the coevolve loop is overdue; enforcement gaps come first"
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/session-capture.sh\"",
+            "timeout": 30
+          }
+        ],
+        "description": "Fingerprint the session before its transcript ages out, and queue it for curation"
+      }
+    ]
+  }
+}

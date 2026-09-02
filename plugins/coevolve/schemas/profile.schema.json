@@ -1,0 +1,129 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/coevolve/schemas/cowork-profile-1.json",
+  "title": "Cowork Profile",
+  "description": "A portable, de-identified summary of how one person works with an AI assistant, for an agent platform to personalise against without re-deriving it. Every qualitative claim carries its evidence count and confidence so a consumer can weight it; claims without support are omitted rather than softened.",
+  "type": "object",
+  "required": ["schema", "generated", "window", "status"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": { "const": "coevolve/cowork-profile/1" },
+    "generated": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+    "status": {
+      "enum": ["ok", "insufficient_data"],
+      "description": "A profile built on too little evidence says so and is still valid. Consumers must degrade rather than reject."
+    },
+    "window": {
+      "type": "object",
+      "required": ["since", "until", "sessions"],
+      "additionalProperties": false,
+      "properties": {
+        "since": { "type": "string" },
+        "until": { "type": "string" },
+        "sessions": { "type": "integer", "minimum": 0 },
+        "note": { "type": "string" }
+      }
+    },
+    "interaction": {
+      "type": "object",
+      "description": "Measured, not self-reported. Derived from session transcripts by a deterministic extractor, so it is comparable over time and across people.",
+      "additionalProperties": false,
+      "properties": {
+        "session_size": { "$ref": "#/$defs/measure" },
+        "steering": { "$ref": "#/$defs/measure" },
+        "delegation": { "$ref": "#/$defs/measure" },
+        "friction": { "$ref": "#/$defs/measure" },
+        "tool_mix": { "$ref": "#/$defs/histogram" },
+        "skill_use": { "$ref": "#/$defs/histogram" },
+        "subagent_use": { "$ref": "#/$defs/histogram" },
+        "model_mix": { "$ref": "#/$defs/histogram" }
+      }
+    },
+    "delegation_policy": {
+      "type": "object",
+      "description": "What this person hands to an AI and what they deliberately keep. The single most useful thing a platform can know about them.",
+      "additionalProperties": false,
+      "properties": {
+        "trusted_to_ai": { "type": "array", "items": { "$ref": "#/$defs/claim" } },
+        "reserved_for_human": { "type": "array", "items": { "$ref": "#/$defs/claim" } }
+      }
+    },
+    "habits": { "type": "array", "items": { "$ref": "#/$defs/claim" } },
+    "reusable_patterns": { "type": "array", "items": { "$ref": "#/$defs/pattern" } },
+    "failure_modes": { "type": "array", "items": { "$ref": "#/$defs/failure" } },
+    "boundaries": {
+      "type": "array",
+      "description": "Where this person has found the AI does not help. Knowing when to stay out of the way is as actionable as knowing when to step in.",
+      "items": { "$ref": "#/$defs/claim" }
+    },
+    "calibration": {
+      "type": "object",
+      "description": "How this person's self-assessment compares with outcomes — e.g. systematically under-confident on delivered tooling. Lets a platform correct for a known bias instead of inheriting it.",
+      "additionalProperties": false,
+      "properties": {
+        "bias": { "type": "string" },
+        "evidence": { "type": "integer", "minimum": 0 },
+        "cycles": { "type": "integer", "minimum": 0 },
+        "confidence": { "$ref": "#/$defs/confidence" }
+      }
+    }
+  },
+  "$defs": {
+    "confidence": { "enum": ["low", "medium", "high"] },
+    "claim": {
+      "type": "object",
+      "required": ["claim", "evidence", "confidence"],
+      "additionalProperties": false,
+      "properties": {
+        "claim": { "type": "string", "minLength": 1 },
+        "evidence": { "type": "integer", "minimum": 1, "description": "How many independent episodes support this. 1 is allowed but must read as weak." },
+        "confidence": { "$ref": "#/$defs/confidence" },
+        "first_seen": { "type": "string" },
+        "last_seen": { "type": "string" }
+      }
+    },
+    "pattern": {
+      "type": "object",
+      "required": ["id", "when", "move", "evidence", "confidence"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "when": { "type": "string", "description": "The trigger. A pattern you cannot recognise in the moment is not reusable." },
+        "move": { "type": "string" },
+        "why": { "type": "string" },
+        "evidence": { "type": "integer", "minimum": 1 },
+        "confidence": { "$ref": "#/$defs/confidence" }
+      }
+    },
+    "failure": {
+      "type": "object",
+      "required": ["id", "summary", "severity", "state"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "summary": { "type": "string" },
+        "severity": { "enum": ["high", "medium", "low"] },
+        "state": {
+          "enum": ["logged", "enacted", "verified", "retired"],
+          "description": "A lesson only counts as handled once it reaches an enforcement layer and the change is measured. `logged` means known and still live."
+        },
+        "enforcement": { "enum": ["none", "rule", "hook", "skill"] },
+        "evidence": { "type": "integer", "minimum": 1 },
+        "verified_change": { "type": "string" }
+      }
+    },
+    "measure": {
+      "type": "object",
+      "required": ["n"],
+      "additionalProperties": true,
+      "properties": {
+        "n": { "type": "integer", "minimum": 0, "description": "Sessions behind this number. Present on every measure so a consumer can weight it." }
+      }
+    },
+    "histogram": {
+      "type": "object",
+      "description": "Name → count. Names come from a fixed vocabulary (tool, skill, agent, model ids); counts only, never content.",
+      "additionalProperties": { "type": "integer", "minimum": 0 }
+    }
+  }
+}

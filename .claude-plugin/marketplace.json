@@ -1,0 +1,18 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "coevolve",
+  "description": "A closed feedback loop that turns how you actually work with Claude Code into a portable cowork profile — and then changes the harness so the lessons stick.",
+  "owner": {
+    "name": "Leo Chien"
+  },
+  "plugins": [
+    {
+      "name": "coevolve",
+      "source": "./plugins/coevolve",
+      "description": "Capture, curate, calibrate, distill, enact, verify. Records your AI-collaboration habits, failure lessons, and reusable patterns from real session transcripts, distills them into a personal playbook plus a portable cowork profile, then writes the high-severity lessons into rules and hooks and measures whether your behaviour actually changed.",
+      "category": "productivity",
+      "license": "MIT",
+      "keywords": ["self-improvement", "metrics", "playbook", "retrospective", "telemetry", "personalization"]
+    }
+  ]
+}

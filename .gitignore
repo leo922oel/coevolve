@@ -1,0 +1,26 @@
+# User data never belongs in this repo — it lives in $COEVOLVE_HOME.
+# These are a backstop in case someone runs the loop from inside the repo, so
+# they are anchored to the root: the shipped templates live under
+# plugins/coevolve/templates/ and must stay tracked, or a fresh clone cannot
+# scaffold at all.
+/denylist.txt
+/config.md
+/playbook.md
+/profile.json
+/vocabulary.md
+/salt
+/episodes/
+/lessons/
+/patterns/
+/metrics/
+/predictions/
+/inbox.md
+/inbox-archive/
+
+*.local.*
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+tmp/
+.omc/

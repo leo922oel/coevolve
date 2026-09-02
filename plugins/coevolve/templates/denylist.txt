@@ -1,0 +1,12 @@
+# coevolve denylist — terms that must never leave this machine.
+#
+# One term per line. Matching is case-insensitive substring; blank lines and
+# #-comments are ignored. This file is LOCAL ONLY: it is never exported, never
+# committed, and never pasted into a conversation — a denylist is itself a list
+# of the things you are trying to protect.
+#
+# Add terms as you meet them. Useful categories:
+#   - employer, product and project code names
+#   - customer and partner names
+#   - internal hostnames and repo path patterns (git.example.internal/group/repo)
+#   - anything you would not want in a screenshot

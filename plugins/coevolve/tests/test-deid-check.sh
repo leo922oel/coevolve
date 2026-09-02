@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# T-004: text containing denylist terms is blocked with terms named; clean text passes.
+set -euo pipefail
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DEID="$HERE/../scripts/deid-check.sh"
+fail() { echo "FAIL: $1"; exit 1; }
+
+deny="$(mktemp)"
+cat > "$deny" <<'EOF'
+# test-owned denylist (comment line must not match anything)
+AcmeCorp
+orders-etl
+
+secret-repo/internal
+EOF
+sum_before="$(md5sum "$deny")"
+
+# hit, exact case → exit 1, term named on stdout
+if out="$(printf 'refactored AcmeCorp pipeline tests' | COEVOLVE_DENYLIST="$deny" bash "$DEID")"; then
+  fail "exact-case hit must exit non-zero"
+fi
+echo "$out" | grep -q 'AcmeCorp' || fail "hit term not named: >>$out<<"
+
+# hit, different case → still blocked (case-insensitive), term named
+if out="$(printf 'touched ACMECORP again' | COEVOLVE_DENYLIST="$deny" bash "$DEID")"; then
+  fail "case-variant hit must exit non-zero"
+fi
+echo "$out" | grep -qi 'acmecorp' || fail "case-variant hit not named: >>$out<<"
+
+# multiple hits across multi-line stdin → each term listed on its own line
+if out="$(printf 'line one mentions orders-etl\nline two mentions secret-repo/internal\n' \
+    | COEVOLVE_DENYLIST="$deny" bash "$DEID")"; then
+  fail "multi-hit input must exit non-zero"
+fi
+echo "$out" | grep -q '^orders-etl$' || fail "orders-etl not listed: >>$out<<"
+echo "$out" | grep -q '^secret-repo/internal$' || fail "secret-repo/internal not listed: >>$out<<"
+
+# clean text → exit 0, no output (blank/comment lines in denylist must not cause hits)
+out="$(printf 'a clean multi-line note\nabout some ETL refactor\n' | COEVOLVE_DENYLIST="$deny" bash "$DEID")" \
+  || fail "clean text must exit 0"
+[ -z "$out" ] || fail "clean text must produce no output: >>$out<<"
+
+# read-only: denylist unmodified after runs
+echo "$sum_before" | md5sum -c --quiet || fail "denylist was modified"
+
+# T-005: missing denylist → fail-open (exit 0, clean stdout) with a loud stderr warning
+missing="$(mktemp -u)"
+out="$(printf 'any text at all' | COEVOLVE_DENYLIST="$missing" bash "$DEID" 2>/tmp/deid-stderr.$$)" \
+  || fail "missing denylist must fail open (exit 0)"
+[ -z "$out" ] || fail "missing denylist must keep stdout clean: >>$out<<"
+grep -qi 'denylist' /tmp/deid-stderr.$$ || fail "missing denylist must warn on stderr: >>$(cat /tmp/deid-stderr.$$)<<"
+rm -f /tmp/deid-stderr.$$
+
+rm -f "$deny"
+echo PASS

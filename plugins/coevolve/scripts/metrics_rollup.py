@@ -1,0 +1,331 @@
+#!/usr/bin/env python3
+"""Roll per-transcript fingerprints up into sessions, and compare windows of them.
+
+`session_metrics.py` looks at one transcript file. That is the wrong unit for
+almost every question worth asking, for two reasons:
+
+  * About half the transcript files on a real machine are subagent sidechains
+    carrying their parent's session id. A session's true cost includes what its
+    subagents did, so those have to be folded back in.
+  * A long session fires Stop repeatedly, so the store accumulates several
+    fingerprints of the same transcript at different points in its life. Only
+    the last one is true.
+
+The `compare` subcommand is the VERIFY stage's engine: given a metric chosen
+*before* the outcome was known and the date a lesson was enacted, it puts the
+two windows next to each other. It refuses to name a direction when either
+window is too thin — a lesson "verified" off two sessions is worse than an
+unverified one, because it retires a real problem on noise.
+
+Stdlib only.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import statistics
+import sys
+from collections import Counter
+from pathlib import Path
+
+
+def default_store() -> Path:
+    import os
+    home = os.environ.get("COEVOLVE_HOME") or os.path.expanduser("~/.claude/coevolve")
+    return Path(home) / "metrics"
+
+
+def load_fingerprints(store: Path) -> list[dict]:
+    """Latest record wins per transcript; malformed lines are skipped, not fatal."""
+    latest: dict[str, dict] = {}
+    order: list[str] = []
+    if not store.exists():
+        return []
+    for path in sorted(store.glob("*.jsonl")):
+        with path.open("r", encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except ValueError:
+                    continue
+                if not isinstance(rec, dict):
+                    continue
+                key = rec.get("transcript_id") or f"{rec.get('session_id','')}::{rec.get('transcript_kind','')}"
+                if key not in latest:
+                    order.append(key)
+                latest[key] = rec
+    return [latest[k] for k in order]
+
+
+def _merge(target: Counter, source) -> None:
+    if isinstance(source, dict):
+        for k, v in source.items():
+            if isinstance(v, int):
+                target[k] += v
+
+
+def roll_up(fingerprints: list[dict]) -> list[dict]:
+    grouped: dict[str, dict] = {}
+    for fp in fingerprints:
+        sid = fp.get("session_id") or fp.get("transcript_id") or "unknown"
+        row = grouped.get(sid)
+        if row is None:
+            row = grouped[sid] = {
+                "session_id": sid,
+                "project_key": fp.get("project_key", ""),
+                "started_at": fp.get("started_at", ""),
+                "ended_at": fp.get("ended_at", ""),
+                "own_tool_calls": 0, "delegated_tool_calls": 0,
+                "user_turns": 0, "tool_errors": 0, "interrupts": 0,
+                "tool_results": 0, "assistant_messages": 0,
+                "transcripts": {"session": 0, "subagent": 0, "unknown": 0},
+                "_tools": Counter(), "_skills": Counter(),
+                "_subagents": Counter(), "_models": Counter(), "_tokens": Counter(),
+            }
+        kind = fp.get("transcript_kind", "unknown")
+        row["transcripts"][kind] = row["transcripts"].get(kind, 0) + 1
+        counts = fp.get("counts", {}) or {}
+        calls = int(counts.get("tool_calls") or 0)
+        if kind == "subagent":
+            row["delegated_tool_calls"] += calls
+        else:
+            row["own_tool_calls"] += calls
+        row["user_turns"] += int(counts.get("user_turns") or 0)
+        row["tool_errors"] += int(counts.get("tool_errors") or 0)
+        row["interrupts"] += int(counts.get("interrupts") or 0)
+        row["tool_results"] += int(counts.get("tool_results") or 0)
+        row["assistant_messages"] += int(counts.get("assistant_messages") or 0)
+        _merge(row["_tools"], fp.get("tools"))
+        _merge(row["_skills"], fp.get("skills"))
+        _merge(row["_subagents"], fp.get("subagents"))
+        _merge(row["_models"], fp.get("models"))
+        _merge(row["_tokens"], fp.get("tokens"))
+        started, ended = fp.get("started_at", ""), fp.get("ended_at", "")
+        if started and (not row["started_at"] or started < row["started_at"]):
+            row["started_at"] = started
+        if ended and ended > row["ended_at"]:
+            row["ended_at"] = ended
+        if not row["project_key"]:
+            row["project_key"] = fp.get("project_key", "")
+
+    rows = []
+    for row in grouped.values():
+        total = row["own_tool_calls"] + row["delegated_tool_calls"]
+        tools = _stable(row.pop("_tools"))
+        skills = _stable(row.pop("_skills"))
+        subagents = _stable(row.pop("_subagents"))
+        models = _stable(row.pop("_models"))
+        tokens = dict(row.pop("_tokens"))
+        row["tool_calls"] = total
+        row["tools"], row["skills"] = tools, skills
+        row["subagents"], row["models"] = subagents, models
+        row["tokens"] = tokens
+        row["counts"] = {
+            "tool_calls": total,
+            "own_tool_calls": row["own_tool_calls"],
+            "delegated_tool_calls": row["delegated_tool_calls"],
+            "tool_results": row["tool_results"],
+            "tool_errors": row["tool_errors"],
+            "interrupts": row["interrupts"],
+            "user_turns": row["user_turns"],
+            "assistant_messages": row["assistant_messages"],
+        }
+        row["derived"] = {
+            "error_rate": _ratio(row["tool_errors"], total),
+            "interrupt_rate": _ratio(row["interrupts"], total),
+            "bash_share": _ratio(tools.get("Bash", 0), total),
+            "turns_per_100_tool_calls": _ratio(row["user_turns"] * 100, total),
+            "delegated_share": _ratio(row["delegated_tool_calls"], total),
+            "skill_calls": sum(skills.values()),
+            "subagent_calls": sum(subagents.values()),
+        }
+        rows.append(row)
+    rows.sort(key=lambda r: (r["started_at"], r["session_id"]))
+    return rows
+
+
+def _stable(counter: Counter) -> dict:
+    return {k: v for k, v in sorted(counter.items(), key=lambda kv: (-kv[1], kv[0]))}
+
+
+def _ratio(num, den) -> float:
+    return round(num / den, 6) if den else 0.0
+
+
+def _dig(row: dict, path: str):
+    node = row
+    for part in path.split("."):
+        if not isinstance(node, dict) or part not in node:
+            return None
+        node = node[part]
+    return node if isinstance(node, (int, float)) else None
+
+
+def _stats(values: list[float]) -> dict:
+    if not values:
+        return {"n": 0, "mean": 0.0, "median": 0.0, "p90": 0.0, "min": 0.0, "max": 0.0}
+    ordered = sorted(values)
+    idx = max(0, int(len(ordered) * 0.9) - 1)
+    return {
+        "n": len(ordered),
+        "mean": round(statistics.mean(ordered), 6),
+        "median": round(statistics.median(ordered), 6),
+        "p90": round(ordered[idx], 6),
+        "min": round(ordered[0], 6),
+        "max": round(ordered[-1], 6),
+    }
+
+
+def _in_window(row, since, until) -> bool:
+    day = (row.get("started_at") or "")[:10]
+    if since and day < since:
+        return False
+    if until and day > until:
+        return False
+    return True
+
+
+def cmd_sessions(rows, _args) -> int:
+    for row in rows:
+        json.dump(row, sys.stdout, ensure_ascii=False)
+        sys.stdout.write("\n")
+    return 0
+
+
+def cmd_window(rows, args) -> int:
+    rows = [r for r in rows if _in_window(r, args.since, args.until)]
+    worked = [r for r in rows if r["tool_calls"] > 0]
+    out = {
+        "since": args.since or "", "until": args.until or "",
+        "sessions": len(rows),
+        "sessions_with_work": len(worked),
+        # Pooled ratios, not averages of ratios. These are different numbers and
+        # the pooled one is what a report should quote: most sessions are small,
+        # so a mean of per-session shares is dominated by sessions where almost
+        # nothing happened. Both are reported so neither can be mistaken for the
+        # other.
+        "totals": _totals(rows),
+        "tool_calls": _stats([r["tool_calls"] for r in rows]),
+        "user_turns": _stats([r["user_turns"] for r in rows]),
+        "error_rate": _stats([r["derived"]["error_rate"] for r in rows]),
+        "interrupts": _stats([r["interrupts"] for r in rows]),
+        "delegated_share": _stats([r["derived"]["delegated_share"] for r in rows]),
+        "tools": _stable(_sum_maps(rows, "tools")),
+        "skills": _stable(_sum_maps(rows, "skills")),
+        "subagents": _stable(_sum_maps(rows, "subagents")),
+        "models": _stable(_sum_maps(rows, "models")),
+        "sessions_using_a_skill": sum(1 for r in rows if r["skills"]),
+    }
+    json.dump(out, sys.stdout, ensure_ascii=False, indent=2)
+    sys.stdout.write("\n")
+    return 0
+
+
+def _totals(rows) -> dict:
+    tool_calls = sum(r["tool_calls"] for r in rows)
+    delegated = sum(r["delegated_tool_calls"] for r in rows)
+    errors = sum(r["tool_errors"] for r in rows)
+    return {
+        "tool_calls": tool_calls,
+        "own_tool_calls": sum(r["own_tool_calls"] for r in rows),
+        "delegated_tool_calls": delegated,
+        "delegated_share": _ratio(delegated, tool_calls),
+        "tool_errors": errors,
+        "error_rate": _ratio(errors, tool_calls),
+        "interrupts": sum(r["interrupts"] for r in rows),
+        "user_turns": sum(r["user_turns"] for r in rows),
+        "sessions_interrupted": sum(1 for r in rows if r["interrupts"] > 0),
+    }
+
+
+def _sum_maps(rows, key) -> Counter:
+    total: Counter = Counter()
+    for row in rows:
+        _merge(total, row.get(key))
+    return total
+
+
+def cmd_compare(rows, args) -> int:
+    before_rows = [r for r in rows if (r.get("started_at") or "")[:10] < args.split]
+    after_rows = [r for r in rows if (r.get("started_at") or "")[:10] >= args.split]
+
+    def values(subset):
+        out = []
+        for row in subset:
+            val = _dig(row, args.metric)
+            if val is None:
+                raise KeyError(args.metric)
+            out.append(val)
+        return out
+
+    try:
+        before, after = values(before_rows), values(after_rows)
+    except KeyError as exc:
+        print(f"metrics_rollup: unknown metric path: {exc.args[0]}", file=sys.stderr)
+        return 2
+
+    result = {
+        "metric": args.metric,
+        "split": args.split,
+        "min_n": args.min_n,
+        "before": _stats(before),
+        "after": _stats(after),
+    }
+    if len(before) < args.min_n or len(after) < args.min_n:
+        # Naming a direction here would let the loop retire a real lesson on
+        # noise, which is worse than leaving it open.
+        result["verdict"] = "insufficient evidence"
+        result["note"] = (f"need >= {args.min_n} sessions on each side; "
+                          f"have {len(before)} before and {len(after)} after")
+    else:
+        b, a = result["before"]["mean"], result["after"]["mean"]
+        scale = max(abs(b), 1e-9)
+        change = (a - b) / scale
+        result["verdict"] = "measured"
+        result["relative_change"] = round(change, 6)
+        result["direction"] = "flat" if abs(change) < 0.05 else ("down" if change < 0 else "up")
+    json.dump(result, sys.stdout, ensure_ascii=False, indent=2)
+    sys.stdout.write("\n")
+    return 0
+
+
+def main(argv=None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    # --store belongs to every subcommand rather than the top level, so it can
+    # be written after the verb the way people actually type it.
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("--store", type=Path, default=None,
+                        help="directory of fingerprint .jsonl files (default: $COEVOLVE_HOME/metrics)")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    sub.add_parser("sessions", parents=[common],
+                   help="emit one rolled-up record per session, as JSONL")
+
+    win = sub.add_parser("window", parents=[common],
+                         help="aggregate statistics over a date window")
+    win.add_argument("--since"), win.add_argument("--until")
+
+    cmp_ = sub.add_parser("compare", parents=[common],
+                          help="before/after comparison around a split date")
+    cmp_.add_argument("--metric", required=True,
+                      help="dotted path into a session row, e.g. derived.error_rate")
+    cmp_.add_argument("--split", required=True, help="YYYY-MM-DD the change took effect")
+    cmp_.add_argument("--min-n", type=int, default=5,
+                      help="minimum sessions per side before a direction is named")
+
+    args = parser.parse_args(argv)
+    store = args.store or default_store()
+    rows = roll_up(load_fingerprints(store))
+
+    if args.command == "sessions":
+        return cmd_sessions(rows, args)
+    if args.command == "window":
+        return cmd_window(rows, args)
+    return cmd_compare(rows, args)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
