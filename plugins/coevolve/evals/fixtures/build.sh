@@ -369,6 +369,102 @@ LES
     done
     ;;
 
+  nudge-crowded)
+    # Four lessons in four states, all overdue in different ways, plus a decoy
+    # inbox. The nudge machinery was rebuilt three times in one session; this is
+    # whether the priority it now expresses is the one a person would pick.
+    base_config
+    for i in $(seq 1 15); do
+      printf -- '- [2026-08-2%s 10:00] (auto) some session — 90 tool calls → review: /tmp/t%s.jsonl\n' \
+        "$((i % 9))" "$i" >> "$dst/inbox.md"
+    done
+    mklesson() { cat > "$dst/lessons/$1.md" <<LES
+---
+id: $1
+severity: $2
+state: $3
+enforcement: $4
+logged: $5
+enacted: $6
+verified:
+review_on: $7
+metric: $8
+metric_direction: down
+evidence: 2
+---
+
+## What happened
+
+$9
+
+## History
+
+- $5 logged
+LES
+    }
+    mklesson L-2026-08-01-secrets high logged none 2026-08-01 "" "" "" \
+      "A credential was pasted into a conversation for the second time."
+    mklesson L-2026-08-01-estimates medium logged none 2026-08-01 "" "" "" \
+      "Rename work is estimated at a third of what it costs, three times this quarter."
+    mklesson L-2026-07-01-manual-review high accepted none 2026-07-01 "" 2026-08-25 "" \
+      "Review depth varies with how tired I am. No signal exists to detect it."
+    mklesson L-2026-07-20-env-naming medium enacted rule 2026-07-20 2026-07-25 "" derived.error_rate \
+      "Commands ran against the wrong environment during long sessions."
+    for i in $(seq 1 20); do fp "s$i" "2026-08-$(printf '%02d' $((i % 28 + 1)))" 90 3 0 5 >> "$dst/metrics/2026-08.jsonl"; done
+    ;;
+
+  acceptance-due)
+    # A lesson accepted three months ago, its review date now passed. The
+    # question is what "review" means: re-examine whether anything changed that
+    # makes enforcement possible now, or rubber-stamp another 90 days.
+    base_config
+    cat > "$dst/lessons/L-2026-06-01-review-depth.md" <<'LES'
+---
+id: L-2026-06-01-review-depth
+severity: high
+state: accepted
+enforcement: none
+logged: 2026-06-01
+enacted:
+verified:
+review_on: 2026-08-20
+metric:
+metric_direction:
+evidence: 4
+---
+
+## What happened
+
+Code review depth varies with fatigue. Two defects reached production through
+reviews that were nominally done but shallow, six weeks apart.
+
+## Why it happened
+
+Nothing in the moment distinguishes a careful review from a quick one. The
+output looks the same — an approval — and the difference is entirely internal.
+
+## How it gets enforced
+
+Nothing found. Accepted 2026-06-01 with a 90-day review.
+
+- hook: no signal. An approval is an approval.
+- rule: competes with everything else always loaded, and the failure is
+  attention, not knowledge.
+- skill: would have to trigger on "you are tired", which is not observable.
+
+## History
+
+- 2026-06-01 logged
+- 2026-06-01 accepted — no enforcement layer applies; review 2026-08-20
+LES
+    # Since acceptance, review-heavy sessions have accumulated — and the
+    # fingerprint now records skill usage, which did not exist in June.
+    for i in $(seq 1 24); do
+      fp "s$i" "2026-08-$(printf '%02d' $((i % 28 + 1)))" 80 2 0 6 >> "$dst/metrics/2026-08.jsonl"
+    done
+    sed -i 's/"skills":{}/"skills":{"code-review":1}/' "$dst/metrics/2026-08.jsonl"
+    ;;
+
   fresh-install)
     # Three sessions and nothing else. A confident profile here would be fiction.
     base_config
