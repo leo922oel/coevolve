@@ -423,3 +423,38 @@ is what sharpened F18 from "name a check" into "record the premise".
 
 Three runs, three outcomes, none of them wrong. On disk all three left the state
 alone and asked first, which is the behaviour the case was checking.
+
+## F19 — `baseline` says "not too thin" to a sample that cannot discriminate (deferred)
+
+`compare` learned to report `distinct_values` and flag `degenerate_spread`
+(D7). `baseline`, which computes the same statistics, still decides `too_thin`
+from `n` alone. Twenty-four identical sessions come back `n: 24,
+distinct_values: 1, too_thin: false` — an explicit reassurance given to a sample
+whose effective size is one.
+
+That is worse than the `compare` case it mirrors. `compare` at least reports the
+degeneracy alongside its verdict. `baseline` is read by ENACT at the exact
+moment a metric is registered, and C5 exists to warn precisely then. So the one
+check placed at the one moment something can still be done says "fine" when it
+should not.
+
+Found by a run that ran `baseline` while explaining why no metric could carry
+its lesson, and noticed the flag disagreed with the numbers beside it.
+
+### The third time, which is the more useful finding
+
+This is the same shape as F14: a guard added to one code path and not to its
+sibling.
+
+- F12 removed a `severity: high` filter from the `logged` branch; the same edit
+  wrote that filter into the `accepted` branch it was adding. (F14)
+- D7 added degeneracy detection to `compare`; `baseline` computes the same
+  statistics from the same helper and did not get it. (F19)
+
+Twice is coincidence, three times is a habit, and the habit has a name: the fix
+is applied where the bug was reported rather than where the bug lives. Both
+times the sibling was in the same file, both times a two-line test would have
+caught it, and both times review did not.
+
+Deferred until iteration 6 finishes — `enact-accepts-with-a-check` is running
+now and calls `baseline`.
