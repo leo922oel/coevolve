@@ -357,3 +357,33 @@ there.
 
 Fix: say so in `curate`, and have it join on `transcript_id` when the file is
 gone. Deferred until iteration 5 finishes, for the same reason as F16.
+
+## F18 — acceptance comes back with nothing to look at (deferred)
+
+`accepted` requires a reason and a `review_on:` date. It does not require an
+observable check, and without one the review has nothing to examine. As the run
+that found it put it: the next review would be word-for-word identical to this
+one — same three layers re-tested, same conclusion, same date pushed out.
+
+`review_on` makes acceptance return. Something to look at is what makes the
+return worth anything. Otherwise the date is theatre and `accepted` becomes the
+graveyard the date was added to prevent.
+
+The same run made the sharper version of the point, about the fixture's own
+state: no new incident had been recorded since acceptance, but nothing was
+recording either — `episodes/` and the inbox were both empty. Silence from a
+system that is not watching looks exactly like silence from a system that is
+safe, and reading the first as the second is precisely how a carried risk
+quietly stops being carried.
+
+Fix: `accepted` must also name what would be observed, where that evidence
+lives, and who looks — the same discipline `enact` already applies to a metric,
+applied to the case where no metric exists. C8 needs amending and the lesson
+template needs the field.
+
+Worth noting separately: this run used `distinct_values` — added hours earlier
+to flag degenerate comparison windows — for something else entirely, to
+demonstrate that *no* metric could carry the lesson, since 24 sessions came back
+with one distinct value on every field. A store with no variance cannot separate
+a careful review from a quick one. That the field was useful for a purpose it
+was not designed for is a good sign about the field.
