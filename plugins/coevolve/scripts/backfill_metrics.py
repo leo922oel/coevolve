@@ -21,6 +21,10 @@ import sys
 from collections import Counter
 from pathlib import Path
 
+# Importing a sibling module would leave a __pycache__ inside the plugin
+# directory, and a directory-source install copies the filesystem — so the
+# bytecode ships. Cheaper to never write it than to remember to clean it.
+sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from session_metrics import analyse, _read_salt  # noqa: E402
 

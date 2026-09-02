@@ -7,7 +7,13 @@
     "name": "Leo Chien"
   },
   "license": "MIT",
-  "keywords": ["self-improvement", "metrics", "playbook", "retrospective", "telemetry", "personalization"],
-  "skills": "./skills/",
-  "hooks": "./hooks/hooks.json"
+  "keywords": [
+    "self-improvement",
+    "metrics",
+    "playbook",
+    "retrospective",
+    "telemetry",
+    "personalization"
+  ],
+  "skills": "./skills/"
 }

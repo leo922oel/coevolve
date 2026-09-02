@@ -40,4 +40,15 @@ for d in "$ROOT"/skills/*/; do
   grep -qE '^description: ' "$f" || fail "$f has no description"
 done
 echo "PASS all $(ls -d "$ROOT"/skills/*/ | wc -l) skills have valid frontmatter"
+
+# hooks/hooks.json is discovered automatically. Naming it in the manifest as
+# well makes the loader see the same file twice and fail the WHOLE plugin —
+# skills included — with an error that `claude plugin validate` does not catch.
+if grep -qE '"hooks"[[:space:]]*:' "$ROOT/.claude-plugin/plugin.json"; then
+  decl="$(grep -oE '"hooks"[[:space:]]*:[^,}]*' "$ROOT/.claude-plugin/plugin.json")"
+  case "$decl" in
+    *hooks/hooks.json*) fail "plugin.json declares the auto-loaded hooks/hooks.json ($decl) — the plugin will fail to load" ;;
+  esac
+fi
+echo "PASS the manifest does not re-declare auto-loaded files"
 echo "PASS"
