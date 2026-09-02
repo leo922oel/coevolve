@@ -52,19 +52,27 @@ if [[ -d "${HOME_DIR}/lessons" ]]; then
           (( age >= enact_due_med )) && soft+="${name} (${sev}, ${age}d) "
         fi
         ;;
-      accepted)
-        [[ "$sev" == high ]] || continue
-        # Acceptance is a decision to carry a risk, not a way to make the alarm
-        # stop. It must name a date to look again, and it comes back then —
-        # otherwise `accepted` quietly becomes where lessons go to be forgotten.
-        review="$(grep -m1 -E '^review_on:' "$f" | sed -E 's/^review_on:[ \t]*//')"
-        if [[ -z "$review" ]]; then
-          expired+="${name} (無 review_on) "
-        else
-          rdays="$(days_since "$review")"
-          [[ -n "$rdays" && "$rdays" -ge 0 ]] && expired+="${name} (複審逾期 ${rdays}d) "
-        fi
-        ;;
+        accepted)
+          # Every severity, deliberately. The high-only filter that hid `logged`
+          # lessons was reintroduced here in the same edit that removed it from
+          # the branch above; a review date that never arrives is the same
+          # failure as a lesson that never surfaces.
+          #
+          # Acceptance is a decision to carry a risk, not a way to make the alarm
+          # stop. It must name a date to look again, and it comes back then —
+          # otherwise `accepted` quietly becomes where lessons go to be forgotten.
+          review="$(grep -m1 -E '^review_on:' "$f" | sed -E 's/^review_on:[ \t]*//')"
+          due_now=""
+          if [[ -z "$review" ]]; then
+            due_now="${name} (無 review_on) "
+          else
+            rdays="$(days_since "$review")"
+            [[ -n "$rdays" && "$rdays" -ge 0 ]] && due_now="${name} (複審逾期 ${rdays}d) "
+          fi
+          if [[ -n "$due_now" ]]; then
+            if [[ "$sev" == high ]]; then expired+="$due_now"; else soft+="$due_now"; fi
+          fi
+          ;;
     esac
   done < <(find "${HOME_DIR}/lessons" -maxdepth 1 -name '*.md' 2>/dev/null | sort)
   [[ -n "$stuck" ]] && out+="🚨 coevolve: high-severity lesson still only written down → 跑 coevolve:enact — ${stuck}"$'\n'

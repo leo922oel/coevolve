@@ -246,3 +246,35 @@ pattern.
 A fourth, found while fixing the third: an `enacted` lesson with no `enacted:`
 date was skipped silently. It is now counted as due, because a malformed state
 is exactly what this stage exists to surface.
+
+
+## F14 — the same filter, reintroduced in the commit that removed it
+
+F12 was the enact nudge filtering on `severity: high`, so medium lessons never
+surfaced. The fix removed that filter from the `logged` branch — and the same
+edit wrote `[[ "$sev" == high ]] || continue` into the `accepted` branch that it
+was adding. An accepted medium lesson's review date would therefore never come
+back, which is F12 again, one branch over.
+
+The commit message for that change reads, in full: *"fixing one instance of a
+pattern is not fixing the pattern"*. It was written while committing the second
+instance.
+
+Found by a run that was not looking for it — `unenf-r3` noticed the gap while
+explaining why its own medium lesson's review would be nobody's job.
+
+This is the system's own thesis demonstrated on the system: **a rule that lives
+only in prose does not change behaviour, and a commit message is weaker prose
+than a playbook.** What would have caught it is what caught it in the end — a
+test. The regression test now covers both severities in the accepted branch,
+because one branch having a test was demonstrably not enough.
+
+Two smaller process notes from the same fix, both worth keeping:
+
+- Two of the three edits attempted here **failed silently**: `str.replace` with
+  a drifted anchor is a no-op, and the script reported success. The third
+  attempt asserted on the result and caught it immediately. Any edit script that
+  cannot fail is an edit script that will eventually lie.
+- The bug was invisible in review and obvious in one command. Running the hook
+  against a two-lesson fixture took seconds; re-reading the diff had already
+  missed it twice.

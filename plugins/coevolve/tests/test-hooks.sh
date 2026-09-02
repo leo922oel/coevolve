@@ -172,6 +172,28 @@ out="$(bash "$CLAUDE_PLUGIN_ROOT/hooks/due-check.sh" 2>/dev/null)"
 printf '%s' "$out" | grep -q 'L-accepted' || fail "an accepted lesson past its review date must come back"
 echo "PASS due-check: acceptance expires on its review date"
 
+# The severity filter that hid medium `logged` lessons was reintroduced into the
+# `accepted` branch in the same commit that fixed it — so an accepted medium
+# lesson's review date would never come back. Both severities are checked here
+# because one of them having a test is evidently not enough.
+cat > "$COEVOLVE_HOME/lessons/L-med-accepted.md" <<LES
+---
+id: L-med-accepted
+severity: medium
+state: accepted
+enforcement: none
+logged: $old
+review_on: $past
+---
+LES
+out="$(bash "$CLAUDE_PLUGIN_ROOT/hooks/due-check.sh" 2>/dev/null)"
+printf '%s' "$out" | grep -q 'L-med-accepted' \
+  || fail "a medium accepted lesson past its review date must come back too"
+printf '%s' "$out" | grep '🚨' | grep -q 'L-med-accepted' \
+  && fail "a medium review must not take the high-severity slot"
+echo "PASS due-check: acceptance review returns at every severity"
+rm -f "$COEVOLVE_HOME/lessons/L-med-accepted.md"
+
 mk L-noreview accepted ""
 rm -f "$COEVOLVE_HOME/lessons/L-accepted.md"
 out="$(bash "$CLAUDE_PLUGIN_ROOT/hooks/due-check.sh" 2>/dev/null)"
