@@ -340,13 +340,32 @@ An always-loaded rule requiring the target environment to be named explicitly.
 - 2026-08-10 logged
 - 2026-08-15 enacted as a rule
 LES
-    # before: six large integration-shaped sessions, high error rate
-    for i in $(seq 1 6); do
-      printf '{"schema":"coevolve/session-metrics/1","session_id":"b%s","transcript_id":"tb%s","transcript_kind":"session","project_key":"proj_integration","label":null,"started_at":"2026-08-0%sT09:00:00.000Z","ended_at":"2026-08-0%sT18:00:00.000Z","span_days":0,"counts":{"lines":900,"parse_errors":0,"tool_calls":300,"tool_results":300,"tool_errors":30,"interrupts":2,"user_turns":40,"assistant_messages":300},"tools":{"Bash":210,"Edit":60,"Read":30},"skills":{"diagnose":1},"subagents":{},"models":{"claude-opus-5":300},"permission_modes":[],"modes":[],"tokens":{"input":10,"output":20,"cache_read":30,"cache_creation":5},"derived":{"error_rate":0.1,"interrupt_rate":0.006667,"bash_share":0.7,"turns_per_100_tool_calls":13.3,"skill_calls":1,"subagent_calls":0,"delegated_tool_call_share":0}}\n' "$i" "$i" "$i" "$i" >> "$dst/metrics/2026-08.jsonl"
+    # Realistic within-group spread, deliberately overlapping at the edges
+    # (before min 0.054, after max 0.059). The first version made every session
+    # in a group identical, which let a run prove the effect was between-group
+    # from the variance structure alone — an answer that would never be
+    # available in real data. The confound has to be found where it actually
+    # lives: the project key, the session size, and the tool mix.
+    #                calls errors turns bash read
+    before_rows="300 30 42 210 60|280 22 36 200 50|340 47 51 240 70|260 14 33 180 50|320 38 45 225 65|300 25 39 205 60"
+    after_rows="90 2 8 30 55|110 6 11 38 65|70 2 6 24 40|100 3 9 33 60|85 5 7 28 50|95 2 10 31 57"
+    i=0
+    IFS='|' read -ra rows <<< "$before_rows"
+    for row in "${rows[@]}"; do
+      i=$((i+1)); read -r c e t b rd <<< "$row"
+      rate="$(awk -v e="$e" -v c="$c" 'BEGIN{printf "%.6f", e/c}')"
+      bs="$(awk -v b="$b" -v c="$c" 'BEGIN{printf "%.6f", b/c}')"
+      printf '{"schema":"coevolve/session-metrics/1","session_id":"b%s","transcript_id":"tb%s","transcript_kind":"session","project_key":"proj_integration","label":null,"started_at":"2026-08-0%sT09:00:00.000Z","ended_at":"2026-08-0%sT18:00:00.000Z","span_days":0,"counts":{"lines":900,"parse_errors":0,"tool_calls":%s,"tool_results":%s,"tool_errors":%s,"interrupts":2,"user_turns":%s,"assistant_messages":%s},"tools":{"Bash":%s,"Read":%s},"skills":{"diagnose":1},"subagents":{},"models":{"claude-opus-5":%s},"permission_modes":[],"modes":[],"tokens":{"input":10,"output":20,"cache_read":30,"cache_creation":5},"derived":{"error_rate":%s,"interrupt_rate":0.006667,"bash_share":%s,"turns_per_100_tool_calls":13.3,"skill_calls":1,"subagent_calls":0,"delegated_tool_call_share":0}}\n' \
+        "$i" "$i" "$i" "$i" "$c" "$c" "$e" "$t" "$c" "$b" "$rd" "$c" "$rate" "$bs" >> "$dst/metrics/2026-08.jsonl"
     done
-    # after: six small review-shaped sessions on a different project, low errors
-    for i in $(seq 1 6); do
-      printf '{"schema":"coevolve/session-metrics/1","session_id":"a%s","transcript_id":"ta%s","transcript_kind":"session","project_key":"proj_review_other","label":null,"started_at":"2026-08-2%sT09:00:00.000Z","ended_at":"2026-08-2%sT10:00:00.000Z","span_days":0,"counts":{"lines":200,"parse_errors":0,"tool_calls":90,"tool_results":90,"tool_errors":2,"interrupts":0,"user_turns":8,"assistant_messages":90},"tools":{"Read":60,"Bash":30},"skills":{"code-review":1},"subagents":{},"models":{"claude-opus-5":90},"permission_modes":[],"modes":[],"tokens":{"input":10,"output":20,"cache_read":30,"cache_creation":5},"derived":{"error_rate":0.022222,"interrupt_rate":0,"bash_share":0.333,"turns_per_100_tool_calls":8.9,"skill_calls":1,"subagent_calls":0,"delegated_tool_call_share":0}}\n' "$i" "$i" "$i" "$i" >> "$dst/metrics/2026-08.jsonl"
+    i=0
+    IFS='|' read -ra rows <<< "$after_rows"
+    for row in "${rows[@]}"; do
+      i=$((i+1)); read -r c e t b rd <<< "$row"
+      rate="$(awk -v e="$e" -v c="$c" 'BEGIN{printf "%.6f", e/c}')"
+      bs="$(awk -v b="$b" -v c="$c" 'BEGIN{printf "%.6f", b/c}')"
+      printf '{"schema":"coevolve/session-metrics/1","session_id":"a%s","transcript_id":"ta%s","transcript_kind":"session","project_key":"proj_review_other","label":null,"started_at":"2026-08-2%sT09:00:00.000Z","ended_at":"2026-08-2%sT10:00:00.000Z","span_days":0,"counts":{"lines":200,"parse_errors":0,"tool_calls":%s,"tool_results":%s,"tool_errors":%s,"interrupts":0,"user_turns":%s,"assistant_messages":%s},"tools":{"Read":%s,"Bash":%s},"skills":{"code-review":1},"subagents":{},"models":{"claude-opus-5":%s},"permission_modes":[],"modes":[],"tokens":{"input":10,"output":20,"cache_read":30,"cache_creation":5},"derived":{"error_rate":%s,"interrupt_rate":0,"bash_share":%s,"turns_per_100_tool_calls":8.9,"skill_calls":1,"subagent_calls":0,"delegated_tool_call_share":0}}\n' \
+        "$i" "$i" "$i" "$i" "$c" "$c" "$e" "$t" "$c" "$rd" "$b" "$c" "$rate" "$bs" >> "$dst/metrics/2026-08.jsonl"
     done
     ;;
 

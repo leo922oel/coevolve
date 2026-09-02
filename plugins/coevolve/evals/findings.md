@@ -166,11 +166,12 @@ can be solved by noticing that a number is impossibly stable. The confound
 should have to be found in `project_key`, session size and tool mix, which is
 where it would actually live.
 
-Fix: give each group realistic within-group spread, with the distributions
-overlapping enough that a constant cannot be the tell. Deferred until after
-iteration 3 finishes so all three runs of the case see the same fixture — a
-fixture changed mid-iteration makes the three runs incomparable, which would
-cost more than the finding is worth.
+Fixed after iteration 3 (deferred so all three runs saw the same fixture). Each
+group now holds six distinct values with the ranges overlapping at the edges —
+before 0.054-0.138, after 0.021-0.059 — so `degenerate_spread` is false and the
+verdict is still a clean `measured / down / -62.4%`. The confound can only be
+found where it actually lives: the project key, the session size, and the tool
+mix.
 
 Also observed by the same run, and worth keeping deliberately: no session falls
 between 08-07 and 08-20, so nothing straddles the enactment date. That was
