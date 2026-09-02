@@ -301,3 +301,32 @@ truth, and it was one flag away the whole time.
 
 An unknown field errors rather than returning an empty window: comparing nothing
 and comparing something that yielded nothing look identical in the output.
+
+## F16 — compare blocks on count, never on composition (deferred)
+
+`blocked_by` has three values and all three are about how many sessions a window
+holds. The confound case has six on each side, clears `min-n`, returns
+`verdict: measured` — and is still unverifiable, because the two windows contain
+different work. One run put the distinction exactly: *"卡點不是樣本數不足，是
+組成錯了"*, and that changes the advice completely. A thin window resolves by
+waiting. A mismatched one never does.
+
+All six runs across iterations 3 and 4 did the same manual analysis to find it:
+split by `project_key` and look for overlap, compare `bash_share`, compare
+median session size, compare which skills appear. Every one of those fields is
+already in the rolled-up row. Six runs independently writing the same analysis
+is the signal that it belongs in the tool — the same reasoning that produced
+`--where` from the same six runs, one step further.
+
+Proposed: a `composition` block on `compare`, reporting project overlap between
+the windows, tool-mix shift, and the session-size ratio, plus a
+`composition_drift` flag alongside `degenerate_spread`. The verdict need not be
+blocked — the numbers are real — but a `measured / down` that comes with
+"these two windows share no project and the tool mix moved by half" is a
+different sentence from one that does not.
+
+**Deferred until iteration 5 finishes.** Its `verify-uses-subpopulation` case is
+running now and asks whether a run discovers `--where` on its own. Adding
+automatic drift detection mid-flight would answer that question for it and make
+the three runs incomparable — the same discipline that deferred the F9 fixture
+fix.
