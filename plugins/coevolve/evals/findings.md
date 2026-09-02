@@ -553,9 +553,38 @@ Deferred until iteration 7 finishes.
 
 ### A note on where the findings are coming from now
 
-F24 is about the eval's own polish, not the product. Iterations 1 to 5 found
-defects in the system; 6 and 7 are increasingly finding defects in the fixtures
-and in the previous fixes. That is a reasonable signal that this line of testing
-is approaching its useful end, and that the next round of value comes from
-running the loop on real data over real weeks rather than from more synthetic
-cases.
+F24 is about the eval's own polish, not the product. Written when it looked like
+iterations 6 and 7 had turned inward — and then F25 arrived in the same round
+and is the most consequential schema-level finding since F1. The pattern is not
+convergence; it is that the *level* changed, from "this judgement is wrong" to
+"this measurement system is missing a dimension". The second kind is harder to
+find with more cases, because it surfaces only when someone finishes a full
+analysis and says: I want to answer this and the data cannot.
+
+
+## F25 — the fingerprint measures cost and never output
+
+Every field is a cost or a friction measure. counts: lines, parse errors, tool
+calls, tool results, tool errors, interrupts, user turns, assistant messages.
+derived: error rate, interrupt rate, bash share, turns per hundred calls, skill
+calls, subagent calls, delegated share. tokens: four kinds of spend. Checked
+field by field — the non-cost column is empty.
+
+So the loop cannot separate "fewer errors" from "less work done", and every
+efficiency claim it can make is unfalsifiable in that direction. The run that
+found it had already reached a verdict and was stating what it could not say:
+per-session output fell by about two thirds alongside the errors, and no field
+records how much a session delivered.
+
+This is the deepest gap the eval has produced. VERIFY exists to answer "did the
+change help", and half of that question has no data behind it. A rule that made
+sessions shorter and less error-prone looks identical to a rule that made them
+smaller.
+
+Three output signals are available in the transcript and are counts, not
+content, so A4 holds: edit actions, distinct files touched, and git commits.
+Verified extractable against a real transcript.
+
+Adding them changes what VERIFY can ask: not only "did the friction fall" but
+"did it fall while the work held". Deferred until iteration 7 finishes, since
+it changes the extractor those runs are reading.
