@@ -71,7 +71,7 @@ PB
 # fp <session_id> <date> <tool_calls> <errors> <interrupts> <turns> [skill] [project]
 fp() {
   local sid="$1" date="$2" calls="$3" errs="$4" ints="$5" turns="$6"
-  local skill="${7:-}" project="${8:-proj}"
+  local skill="${7:-}" project="${8:-proj}" tid="${9:-}"
   # Deterministic per-session variation, so no two sessions are byte-identical
   # in shape unless a fixture deliberately makes them so.
   local h; h=$(printf '%s' "$sid" | cksum | cut -d' ' -f1)
@@ -102,7 +102,7 @@ fp() {
     --errors "$errs" --turns "$turns" --interrupts "$ints" --hours "$hours" \
     ${skill:+--skill "$skill"}
   python3 "$FIXTURE_DIR/../../scripts/session_metrics.py" "$tdir/t.jsonl" \
-    | python3 -c 'import json,sys; d=json.load(sys.stdin); d["session_id"]=sys.argv[1]; d["transcript_id"]="t-"+sys.argv[1]; print(json.dumps(d,ensure_ascii=False))' "$sid"
+    | python3 -c 'import json,sys; d=json.load(sys.stdin); d["session_id"]=sys.argv[1]; d["transcript_id"]=sys.argv[2] or ("t-"+sys.argv[1]); print(json.dumps(d,ensure_ascii=False))' "$sid" "$tid"
   rm -rf "$tdir"
 }
 
@@ -378,33 +378,21 @@ An always-loaded rule requiring the target environment to be named explicitly.
 - 2026-08-10 logged
 - 2026-08-15 enacted as a rule
 LES
-    # Realistic within-group spread, deliberately overlapping at the edges
-    # (before min 0.054, after max 0.059). The first version made every session
-    # in a group identical, which let a run prove the effect was between-group
-    # from the variance structure alone — an answer that would never be
-    # available in real data. The confound has to be found where it actually
-    # lives: the project key, the session size, and the tool mix.
-    #                calls errors turns bash read
-    before_rows="300 30 42 210 60|280 22 36 200 50|340 47 51 240 70|260 14 33 180 50|320 38 45 225 65|300 25 39 205 60"
-    after_rows="90 2 8 30 55|110 6 11 38 65|70 2 6 24 40|100 3 9 33 60|85 5 7 28 50|95 2 10 31 57"
-    i=0
-    IFS='|' read -ra rows <<< "$before_rows"
-    for row in "${rows[@]}"; do
-      i=$((i+1)); read -r c e t b rd <<< "$row"
-      rate="$(awk -v e="$e" -v c="$c" 'BEGIN{printf "%.6f", e/c}')"
-      bs="$(awk -v b="$b" -v c="$c" 'BEGIN{printf "%.6f", b/c}')"
-      printf '{"schema":"coevolve/session-metrics/1","session_id":"b%s","transcript_id":"tb%s","transcript_kind":"session","project_key":"proj_integration","label":null,"started_at":"2026-08-0%sT09:00:00.000Z","ended_at":"2026-08-0%sT18:00:00.000Z","span_days":0,"counts":{"lines":900,"parse_errors":0,"tool_calls":%s,"tool_results":%s,"tool_errors":%s,"interrupts":2,"user_turns":%s,"assistant_messages":%s},"tools":{"Bash":%s,"Read":%s},"skills":{"diagnose":1},"subagents":{},"models":{"claude-opus-5":%s},"permission_modes":[],"modes":[],"tokens":{"input":10,"output":20,"cache_read":30,"cache_creation":5},"derived":{"error_rate":%s,"interrupt_rate":0.006667,"bash_share":%s,"turns_per_100_tool_calls":13.3,"skill_calls":1,"subagent_calls":0,"delegated_tool_call_share":0}}\n' \
-        "$i" "$i" "$i" "$i" "$c" "$c" "$e" "$t" "$c" "$b" "$rd" "$c" "$rate" "$bs" >> "$dst/metrics/2026-08.jsonl"
-    done
-    i=0
-    IFS='|' read -ra rows <<< "$after_rows"
-    for row in "${rows[@]}"; do
-      i=$((i+1)); read -r c e t b rd <<< "$row"
-      rate="$(awk -v e="$e" -v c="$c" 'BEGIN{printf "%.6f", e/c}')"
-      bs="$(awk -v b="$b" -v c="$c" 'BEGIN{printf "%.6f", b/c}')"
-      printf '{"schema":"coevolve/session-metrics/1","session_id":"a%s","transcript_id":"ta%s","transcript_kind":"session","project_key":"proj_review_other","label":null,"started_at":"2026-08-2%sT09:00:00.000Z","ended_at":"2026-08-2%sT10:00:00.000Z","span_days":0,"counts":{"lines":200,"parse_errors":0,"tool_calls":%s,"tool_results":%s,"tool_errors":%s,"interrupts":0,"user_turns":%s,"assistant_messages":%s},"tools":{"Read":%s,"Bash":%s},"skills":{"code-review":1},"subagents":{},"models":{"claude-opus-5":%s},"permission_modes":[],"modes":[],"tokens":{"input":10,"output":20,"cache_read":30,"cache_creation":5},"derived":{"error_rate":%s,"interrupt_rate":0,"bash_share":%s,"turns_per_100_tool_calls":8.9,"skill_calls":1,"subagent_calls":0,"delegated_tool_call_share":0}}\n' \
-        "$i" "$i" "$i" "$i" "$c" "$c" "$e" "$t" "$c" "$rd" "$b" "$c" "$rate" "$bs" >> "$dst/metrics/2026-08.jsonl"
-    done
+    # Two populations, one either side of the split. Sizes and error rates
+    # differ by design; the extractor computes everything else.
+    #  sid date        calls err int turns skill       project
+    fp b1 2026-08-01 300 30 2 42 diagnose proj_integration >> "$dst/metrics/2026-08.jsonl"
+    fp b2 2026-08-02 280 22 2 36 diagnose proj_integration >> "$dst/metrics/2026-08.jsonl"
+    fp b3 2026-08-03 340 47 3 51 diagnose proj_integration >> "$dst/metrics/2026-08.jsonl"
+    fp b4 2026-08-04 260 14 1 33 diagnose proj_integration >> "$dst/metrics/2026-08.jsonl"
+    fp b5 2026-08-05 320 38 2 45 diagnose proj_integration >> "$dst/metrics/2026-08.jsonl"
+    fp b6 2026-08-06 300 25 2 39 diagnose proj_integration >> "$dst/metrics/2026-08.jsonl"
+    fp a1 2026-08-21  90  2 0  8 code-review proj_review_other >> "$dst/metrics/2026-08.jsonl"
+    fp a2 2026-08-22 110  6 0 11 code-review proj_review_other >> "$dst/metrics/2026-08.jsonl"
+    fp a3 2026-08-23  70  2 0  6 code-review proj_review_other >> "$dst/metrics/2026-08.jsonl"
+    fp a4 2026-08-24 100  3 0  9 code-review proj_review_other >> "$dst/metrics/2026-08.jsonl"
+    fp a5 2026-08-25  85  5 0  7 code-review proj_review_other >> "$dst/metrics/2026-08.jsonl"
+    fp a6 2026-08-26  95  2 0 10 code-review proj_review_other >> "$dst/metrics/2026-08.jsonl"
     ;;
 
   nudge-crowded)
@@ -550,20 +538,21 @@ less command-heavy sessions — so the shape of the work is expected to change.
 - 2026-08-08 logged
 - 2026-08-15 enacted as a rule
 LES
-    # Same project throughout. Sessions get shorter and less Bash-heavy after
-    # the split, which is what the rule was for.
-    for i in $(seq 1 6); do
-      e=$((26 + i)); c=300; b=215
-      rate="$(awk -v e="$e" -v c="$c" 'BEGIN{printf "%.6f", e/c}')"
-      printf '{"schema":"coevolve/session-metrics/1","session_id":"b%s","transcript_id":"tb%s","transcript_kind":"session","project_key":"proj_integration","label":null,"started_at":"2026-08-0%sT09:00:00.000Z","ended_at":"2026-08-0%sT17:00:00.000Z","span_days":0,"counts":{"lines":900,"parse_errors":0,"tool_calls":%s,"tool_results":%s,"tool_errors":%s,"interrupts":2,"user_turns":38,"assistant_messages":%s},"tools":{"Bash":%s,"Read":85},"skills":{"diagnose":1},"subagents":{},"models":{"claude-opus-5":%s},"permission_modes":[],"modes":[],"tokens":{"input":10,"output":20,"cache_read":30,"cache_creation":5},"derived":{"error_rate":%s,"interrupt_rate":0.0067,"bash_share":0.716667,"turns_per_100_tool_calls":12.7,"skill_calls":1,"subagent_calls":0,"delegated_tool_call_share":0}}\n' \
-        "$i" "$i" "$i" "$i" "$c" "$c" "$e" "$c" "$b" "$c" "$rate" >> "$dst/metrics/2026-08.jsonl"
-    done
-    for i in $(seq 1 6); do
-      e=$((3 + i % 3)); c=120; b=55
-      rate="$(awk -v e="$e" -v c="$c" 'BEGIN{printf "%.6f", e/c}')"
-      printf '{"schema":"coevolve/session-metrics/1","session_id":"a%s","transcript_id":"ta%s","transcript_kind":"session","project_key":"proj_integration","label":null,"started_at":"2026-08-2%sT09:00:00.000Z","ended_at":"2026-08-2%sT12:00:00.000Z","span_days":0,"counts":{"lines":400,"parse_errors":0,"tool_calls":%s,"tool_results":%s,"tool_errors":%s,"interrupts":0,"user_turns":14,"assistant_messages":%s},"tools":{"Bash":%s,"Read":65},"skills":{"diagnose":1},"subagents":{},"models":{"claude-opus-5":%s},"permission_modes":[],"modes":[],"tokens":{"input":10,"output":20,"cache_read":30,"cache_creation":5},"derived":{"error_rate":%s,"interrupt_rate":0,"bash_share":0.458333,"turns_per_100_tool_calls":11.7,"skill_calls":1,"subagent_calls":0,"delegated_tool_call_share":0}}\n' \
-        "$i" "$i" "$i" "$i" "$c" "$c" "$e" "$c" "$b" "$c" "$rate" >> "$dst/metrics/2026-08.jsonl"
-    done
+    # Same project throughout. Sessions get shorter and less command-heavy after
+    # the split, which is exactly what the rule was for — so the drift a reader
+    # sees flagged is the mechanism, not a competing explanation.
+    fp b1 2026-08-01 300 27 2 38 diagnose proj_integration >> "$dst/metrics/2026-08.jsonl"
+    fp b2 2026-08-02 300 28 2 38 diagnose proj_integration >> "$dst/metrics/2026-08.jsonl"
+    fp b3 2026-08-03 300 29 2 38 diagnose proj_integration >> "$dst/metrics/2026-08.jsonl"
+    fp b4 2026-08-04 300 30 2 38 diagnose proj_integration >> "$dst/metrics/2026-08.jsonl"
+    fp b5 2026-08-05 300 31 2 38 diagnose proj_integration >> "$dst/metrics/2026-08.jsonl"
+    fp b6 2026-08-06 300 32 2 38 diagnose proj_integration >> "$dst/metrics/2026-08.jsonl"
+    fp a1 2026-08-21 120  4 0 14 diagnose proj_integration >> "$dst/metrics/2026-08.jsonl"
+    fp a2 2026-08-22 120  5 0 14 diagnose proj_integration >> "$dst/metrics/2026-08.jsonl"
+    fp a3 2026-08-23 120  3 0 14 diagnose proj_integration >> "$dst/metrics/2026-08.jsonl"
+    fp a4 2026-08-24 120  4 0 14 diagnose proj_integration >> "$dst/metrics/2026-08.jsonl"
+    fp a5 2026-08-25 120  5 0 14 diagnose proj_integration >> "$dst/metrics/2026-08.jsonl"
+    fp a6 2026-08-26 120  3 0 14 diagnose proj_integration >> "$dst/metrics/2026-08.jsonl"
     ;;
 
   expired-transcript)
@@ -573,8 +562,12 @@ LES
     base_config
     printf -- "- [2026-07-20 14:02] (auto) 跨環境部署腳本重寫 — 268 tool calls → review: %s/.claude/projects/-home-example-proj/9c1f4a02-7b3e-4d51-a8c9-1e2f3a4b5c6d.jsonl\n" "$HOME" >> "$dst/inbox.md"
     printf -- "- [2026-08-30 11:15] (auto) 設定面板效能分析 — 142 tool calls → review: %s/.claude/projects/-home-example-proj/2b8e7d13-4c5a-4e62-9f10-3a4b5c6d7e8f.jsonl\n" "$HOME" >> "$dst/inbox.md"
-    printf '{"schema":"coevolve/session-metrics/1","session_id":"S-old","transcript_id":"9c1f4a02-7b3e-4d51-a8c9-1e2f3a4b5c6d","transcript_kind":"session","project_key":"proj_deploy","label":null,"started_at":"2026-07-20T05:10:00.000Z","ended_at":"2026-07-20T09:40:00.000Z","span_days":0,"counts":{"lines":760,"parse_errors":0,"tool_calls":268,"tool_results":268,"tool_errors":9,"interrupts":3,"user_turns":31,"assistant_messages":268},"tools":{"Bash":180,"Edit":52,"Read":36},"skills":{"diagnose":1,"jira-connector":1},"subagents":{"Explore":2},"models":{"claude-opus-5":268},"permission_modes":[],"modes":[],"tokens":{"input":90,"output":240,"cache_read":800,"cache_creation":40},"derived":{"error_rate":0.033582,"interrupt_rate":0.011194,"bash_share":0.671642,"turns_per_100_tool_calls":11.6,"skill_calls":2,"subagent_calls":2,"delegated_tool_call_share":0.19}}\n' >> "$dst/metrics/2026-07.jsonl"
-    printf '{"schema":"coevolve/session-metrics/1","session_id":"S-new","transcript_id":"2b8e7d13-4c5a-4e62-9f10-3a4b5c6d7e8f","transcript_kind":"session","project_key":"proj_ui","label":null,"started_at":"2026-08-30T03:20:00.000Z","ended_at":"2026-08-30T05:05:00.000Z","span_days":0,"counts":{"lines":410,"parse_errors":0,"tool_calls":142,"tool_results":142,"tool_errors":2,"interrupts":0,"user_turns":12,"assistant_messages":142},"tools":{"Read":70,"Bash":50,"Edit":22},"skills":{"diagnose":1},"subagents":{},"models":{"claude-opus-5":142},"permission_modes":[],"modes":[],"tokens":{"input":40,"output":110,"cache_read":300,"cache_creation":20},"derived":{"error_rate":0.014085,"interrupt_rate":0,"bash_share":0.352113,"turns_per_100_tool_calls":8.5,"skill_calls":1,"subagent_calls":0,"delegated_tool_call_share":0}}\n' >> "$dst/metrics/2026-08.jsonl"
+    # Fingerprints whose transcripts are gone. The ids must match the paths in
+    # the inbox above, so curate can join on the stem.
+    fp S-old 2026-07-20 268 9 3 31 diagnose proj_deploy 9c1f4a02-7b3e-4d51-a8c9-1e2f3a4b5c6d \
+      >> "$dst/metrics/2026-07.jsonl"
+    fp S-new 2026-08-30 142 2 0 12 diagnose proj_ui 2b8e7d13-4c5a-4e62-9f10-3a4b5c6d7e8f \
+      >> "$dst/metrics/2026-08.jsonl"
     ;;
 
   fresh-install)
