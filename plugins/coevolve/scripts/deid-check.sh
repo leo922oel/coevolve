@@ -17,7 +17,11 @@ fi
 
 text="$(cat)"
 hits=""
-while IFS= read -r term; do
+# `|| [ -n "$term" ]` keeps the final line when the file does not end in a
+# newline. Without it `read` returns false on that line and the term is never
+# checked — silently, and fail-open. A denylist is hand-edited, so a missing
+# trailing newline is ordinary, and the dropped term is the one added last.
+while IFS= read -r term || [ -n "${term:-}" ]; do
   case "$term" in ''|\#*) continue ;; esac
   if printf '%s' "$text" | grep -qiF -- "$term"; then
     hits+="${term}"$'\n'

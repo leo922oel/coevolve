@@ -43,6 +43,25 @@ out="$(printf 'a clean multi-line note\nabout some ETL refactor\n' | COEVOLVE_DE
 # read-only: denylist unmodified after runs
 echo "$sum_before" | md5sum -c --quiet || fail "denylist was modified"
 
+# ── negative control: a denylist whose last line has no trailing newline ──────
+# `while read` returns false on the final line when the file does not end in a
+# newline, so the last term was silently never checked. A hand-edited denylist
+# is exactly how a file ends up like that, and the term most recently added —
+# the one someone cared enough to add today — is the one that gets dropped.
+# The python gate (validate_profile.py) reads the same file with .splitlines()
+# and caught it, so the two gates disagreed on the same input.
+nonl="$(mktemp)"
+printf 'AcmeCorp\nlast-term-no-newline' > "$nonl"   # deliberately no trailing \n
+if out="$(printf 'we shipped last-term-no-newline today' | COEVOLVE_DENYLIST="$nonl" bash "$DEID")"; then
+  fail "final denylist term without a trailing newline must still block (got exit 0)"
+fi
+echo "$out" | grep -q '^last-term-no-newline$' || fail "final term not named: >>$out<<"
+# and the earlier terms in the same file must keep working
+if out="$(printf 'about AcmeCorp' | COEVOLVE_DENYLIST="$nonl" bash "$DEID")"; then
+  fail "earlier term in a no-trailing-newline denylist must still block"
+fi
+rm -f "$nonl"
+
 # T-005: missing denylist → fail-open (exit 0, clean stdout) with a loud stderr warning
 missing="$(mktemp -u)"
 out="$(printf 'any text at all' | COEVOLVE_DENYLIST="$missing" bash "$DEID" 2>/tmp/deid-stderr.$$)" \
